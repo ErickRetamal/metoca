@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "metoca",
+    "name": "MeToca",
     "slug": "metoca",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,20 +9,33 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#4F46E5"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.metoca.app"
     },
     "android": {
+      "package": "com.metoca.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#4F46E5",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "MeToca usa Face ID para proteger tu sesión."
+        }
+      ]
+    ],
+    "scheme": "metoca",
     "web": {
       "favicon": "./assets/favicon.png"
     }

@@ -18,6 +18,18 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Environment — nunca subir al repo
+.env
+.env.local
+
+# Supabase local
+supabase/.branches
+supabase/.temp
+
+# Firebase credentials — nunca subir al repo
+google-services.json
+GoogleService-Info.plist
+
 # Metro
 .metro-health-check*
 

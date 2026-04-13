@@ -9,10 +9,23 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.0.2",
+    "@supabase/supabase-js": "^2.100.1",
     "expo": "55.0.10-canary-20260328-2049187",
-    "expo-status-bar": "55.0.5-canary-20260328-2049187",
+    "expo-constants": "^55.0.10-canary-20260328-2049187",
+    "expo-linking": "^55.0.10-canary-20260328-2049187",
+    "expo-notifications": "^55.0.15-canary-20260328-2049187",
+    "expo-router": "^55.0.9-canary-20260328-2049187",
+    "expo-secure-store": "^55.0.10-canary-20260328-2049187",
+    "expo-status-bar": "^55.0.5-canary-20260328-2049187",
     "react": "19.2.0",
-    "react-native": "0.83.4"
+    "react-dom": "^19.2.0",
+    "react-native": "0.83.4",
+    "react-native-purchases": "^9.15.0",
+    "react-native-reanimated": "^4.3.0",
+    "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.24.0",
+    "react-native-web": "~0.21.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
