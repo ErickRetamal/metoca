@@ -30,6 +30,14 @@ export default function TabsLayout() {
         name="household-month"
         options={{ title: 'Hogar mes' }}
       />
+      <Tabs.Screen
+        name="task-month-detail"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="household-task-month-detail"
+        options={{ href: null }}
+      />
     </Tabs>
   )
 }

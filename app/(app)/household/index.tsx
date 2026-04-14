@@ -7,6 +7,7 @@ import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentPlanAsync, invalidateDashboardContextCache } from '../../../lib/dashboard'
+import { goToPaywall } from '../../../lib/navigation'
 
 interface TaskTemplate {
   key: string
@@ -72,11 +73,15 @@ export default function HouseholdScreen() {
   const { onMenuPress } = useMenuContext()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [transferringAdminId, setTransferringAdminId] = useState<string | null>(null)
   const [household, setHousehold] = useState<HouseholdData | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [selectedTaskNames, setSelectedTaskNames] = useState<string[]>([])
   const [customTasks, setCustomTasks] = useState<Array<{ id: string; name: string; frequency: 'daily' | 'weekly' | 'monthly' }>>([])
   const [plan, setPlan] = useState<AppPlan>('free')
+  const [customTaskNameDraft, setCustomTaskNameDraft] = useState('')
+  const [customTaskFrequency, setCustomTaskFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
+
   // Create flow
   const [householdNameDraft, setHouseholdNameDraft] = useState('')
 
@@ -316,6 +321,48 @@ export default function HouseholdScreen() {
     )
   }
 
+  async function handleTransferAdmin(nextAdminId: string, nextAdminName: string) {
+    if (!household || !currentUserId) return
+    if (household.adminUserId !== currentUserId) return
+    if (nextAdminId === currentUserId) return
+
+    Alert.alert(
+      'Transferir jefatura',
+      `¿Quieres transferir el hogar a ${nextAdminName}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Transferir',
+          onPress: async () => {
+            setTransferringAdminId(nextAdminId)
+            try {
+              const { error } = await supabase
+                .from('households')
+                .update({ admin_user_id: nextAdminId })
+                .eq('id', household.id)
+
+              if (error) {
+                Alert.alert('Error', error.message)
+                return
+              }
+
+              setHousehold(prev => prev ? {
+                ...prev,
+                adminUserId: nextAdminId,
+                adminName: nextAdminName,
+              } : prev)
+
+              invalidateDashboardContextCache()
+              Alert.alert('Listo', `Ahora ${nextAdminName} es el jefe de hogar.`)
+            } finally {
+              setTransferringAdminId(null)
+            }
+          },
+        },
+      ]
+    )
+  }
+
   async function handleSaveEdit() {
     const name = editNameDraft.trim()
     if (!name) {
@@ -343,25 +390,174 @@ export default function HouseholdScreen() {
     }
   }
 
-  async function handleDeactivateTask(taskId: string | null, taskName: string) {
-    if (!household || !currentUserId || household.adminUserId !== currentUserId) return
+  async function toggleTemplate(template: TaskTemplate) {
+    if (!household || !currentUserId) return
+
+    if (household.adminUserId !== currentUserId) {
+      Alert.alert('Solo el jefe puede editar', 'Pide al jefe de hogar que seleccione las tareas del hogar.')
+      return
+    }
+
+    const isSelected = selectedTaskNames.includes(template.name)
     setSaving(true)
     try {
-      if (taskId) {
-        const { error } = await supabase
-          .from('tasks')
-          .update({ is_active: false, deleted_at: new Date().toISOString() })
-          .eq('id', taskId)
-          .eq('household_id', household.id)
-        if (error) { Alert.alert('Error', error.message); return }
-      } else {
+      if (isSelected) {
         const { error } = await supabase
           .from('tasks')
           .update({ is_active: false, deleted_at: new Date().toISOString() })
           .eq('household_id', household.id)
-          .eq('name', taskName)
-        if (error) { Alert.alert('Error', error.message); return }
+          .eq('name', template.name)
+
+        if (error) {
+          Alert.alert('Error', error.message)
+          return
+        }
+
+        setSelectedTaskNames(prev => prev.filter(name => name !== template.name))
+        return
       }
+
+      const { data: existing } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('household_id', household.id)
+        .eq('name', template.name)
+        .limit(1)
+
+      if (existing && existing.length > 0) {
+        const { error: reactivateError } = await supabase
+          .from('tasks')
+          .update({
+            is_active: true,
+            deleted_at: null,
+            frequency: template.frequency,
+            notification_time: template.notificationTime,
+            day_of_week: template.dayOfWeek ?? null,
+            day_of_month: template.dayOfMonth ?? null,
+          })
+          .eq('id', existing[0].id)
+
+        if (reactivateError) {
+          Alert.alert('Error', reactivateError.message)
+          return
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from('tasks')
+          .insert({
+            household_id: household.id,
+            name: template.name,
+            frequency: template.frequency,
+            notification_time: template.notificationTime,
+            day_of_week: template.dayOfWeek ?? null,
+            day_of_month: template.dayOfMonth ?? null,
+            created_by: currentUserId,
+            is_active: true,
+          })
+
+        if (insertError) {
+          Alert.alert('Error', insertError.message)
+          return
+        }
+      }
+
+      setSelectedTaskNames(prev => [...prev, template.name])
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleAddCustomTask() {
+    if (!household || !currentUserId) return
+
+    if (plan === 'free') {
+      Alert.alert(
+        'Plan Free',
+        'En Free solo puedes usar tareas fijas. Actualiza a Hogar o Familia para crear nuevas tareas.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ver planes', onPress: () => goToPaywall('household-free-alert') },
+        ]
+      )
+      return
+    }
+
+    if (household.adminUserId !== currentUserId) {
+      Alert.alert('Solo el jefe puede editar', 'Pide al jefe de hogar que agregue tareas personalizadas.')
+      return
+    }
+
+    const taskName = customTaskNameDraft.trim()
+    if (!taskName) {
+      Alert.alert('Nombre requerido', 'Escribe un nombre para la tarea personalizada.')
+      return
+    }
+
+    const lowerName = taskName.toLowerCase()
+    const alreadyExists = selectedTaskNames.some(name => name.toLowerCase() === lowerName)
+    if (alreadyExists) {
+      Alert.alert('Ya existe', 'Esa tarea ya esta activa en el hogar.')
+      return
+    }
+
+    const maxCustomTasks = getCustomTaskLimit(plan)
+    if (customTasks.length >= maxCustomTasks) {
+      Alert.alert(
+        'Limite alcanzado',
+        `Tu plan actual permite hasta ${maxCustomTasks} tareas personalizadas activas.`
+      )
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .insert({
+          household_id: household.id,
+          name: taskName,
+          frequency: customTaskFrequency,
+          notification_time: '20:00:00',
+          day_of_week: customTaskFrequency === 'weekly' ? 1 : null,
+          day_of_month: customTaskFrequency === 'monthly' ? 1 : null,
+          created_by: currentUserId,
+          is_active: true,
+        })
+
+      if (error) {
+        Alert.alert('Error', error.message)
+        return
+      }
+
+      setCustomTaskNameDraft('')
+      setCustomTaskFrequency('weekly')
+      await loadHouseholdTasks(household.id)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemoveCustomTask(taskId: string) {
+    if (!household || !currentUserId) return
+
+    if (household.adminUserId !== currentUserId) {
+      Alert.alert('Solo el jefe puede editar', 'Pide al jefe de hogar que gestione las tareas personalizadas.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ is_active: false, deleted_at: new Date().toISOString() })
+        .eq('id', taskId)
+        .eq('household_id', household.id)
+
+      if (error) {
+        Alert.alert('Error', error.message)
+        return
+      }
+
       await loadHouseholdTasks(household.id)
     } finally {
       setSaving(false)
@@ -370,6 +566,7 @@ export default function HouseholdScreen() {
 
   const isAdmin = household?.adminUserId === currentUserId
   const isProPlan = plan !== 'free'
+  const transferCandidates = household?.members.filter(member => member.id !== currentUserId) ?? []
 
   if (loading) {
     return (
@@ -482,65 +679,51 @@ export default function HouseholdScreen() {
 
             <Reveal delay={110}>
               <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Tareas activas</Text>
-                {isAdmin && (
-                  <Pressable onPress={() => router.push('/(app)/household/configure-tasks')}>
-                    <Text style={styles.linkText}>Gestionar</Text>
-                  </Pressable>
-                )}
-              </View>
+              <Text style={styles.cardTitle}>Tareas del hogar</Text>
+              <Text style={styles.cardSubtitle}>
+                {isAdmin
+                  ? 'Administra y asigna tareas desde la pantalla de configuración.'
+                  : 'Revisa las tareas del hogar en la pantalla de configuración.'}
+              </Text>
 
-              {selectedTaskNames.length === 0 ? (
-                <Text style={styles.cardSubtitle}>
-                  No hay tareas activas aún.{isAdmin ? ' Usa "Gestionar" para asignar tareas al hogar.' : ' El jefe del hogar puede asignarlas.'}
-                </Text>
-              ) : (
-                <View style={styles.activeTaskList}>
-                  {selectedTaskNames.map(name => {
-                    const custom = customTasks.find(t => t.name === name)
-                    const template = TASK_TEMPLATES.find(t => t.name === name)
-                    const code = template?.code ?? getTaskCode(name)
-                    const color = template?.color ?? getTaskThumbColor(name)
-                    const freq = custom?.frequency ?? template?.frequency ?? 'daily'
-                    const freqLabel = freq === 'daily' ? 'Diaria' : freq === 'weekly' ? 'Semanal' : 'Mensual'
-                    return (
-                      <View key={name} style={styles.activeTaskRow}>
-                        <View style={[styles.activeTaskThumb, { backgroundColor: color }]}>
-                          <Text style={styles.activeTaskThumbText}>{code}</Text>
-                        </View>
-                        <View style={styles.activeTaskInfo}>
-                          <Text style={styles.activeTaskName}>{name}</Text>
-                          <Text style={styles.activeTaskFreq}>{freqLabel}</Text>
-                        </View>
-                        {isAdmin && (
-                          <Pressable
-                            style={[styles.deactivateButton, saving && styles.buttonDisabled]}
-                            onPress={() => handleDeactivateTask(custom?.id ?? null, name)}
-                            disabled={saving}
-                          >
-                            <Text style={styles.deactivateButtonText}>Quitar</Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    )
-                  })}
-                </View>
-              )}
-
-              {isAdmin && (
-                <Pressable
-                  style={styles.primaryButton}
-                  onPress={() => router.push('/(app)/household/configure-tasks')}
-                >
-                  <Text style={styles.primaryButtonText}>Asignar nuevas tareas</Text>
-                </Pressable>
-              )}
+              <Pressable
+                style={styles.primaryButton}
+                onPress={() => router.push('/(app)/household/configure-tasks')}
+              >
+                <Text style={styles.primaryButtonText}>{isAdmin ? 'Abrir configuración de tareas' : 'Ver tareas del hogar'}</Text>
+              </Pressable>
             </View>
             </Reveal>
 
             {/* Leave */}
             <Reveal delay={130}>
+            {isAdmin && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Transferir jefatura</Text>
+                {transferCandidates.length === 0 ? (
+                  <Text style={styles.cardSubtitle}>Necesitas al menos otro miembro activo para transferir el hogar.</Text>
+                ) : (
+                  <View style={styles.transferList}>
+                    {transferCandidates.map(member => (
+                      <Pressable
+                        key={member.id}
+                        style={[
+                          styles.transferButton,
+                          (saving || transferringAdminId === member.id) && styles.buttonDisabled,
+                        ]}
+                        onPress={() => handleTransferAdmin(member.id, member.name)}
+                        disabled={saving || transferringAdminId !== null}
+                      >
+                        <Text style={styles.transferButtonText}>
+                          {transferringAdminId === member.id ? 'Transfiriendo...' : `Transferir a ${member.name}`}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
             {!isAdmin && (
               <Pressable
                 style={[styles.dangerButton, saving && styles.buttonDisabled]}
@@ -549,12 +732,6 @@ export default function HouseholdScreen() {
               >
                 <Text style={styles.dangerButtonText}>Salir del hogar</Text>
               </Pressable>
-            )}
-
-            {isAdmin && (
-              <View style={styles.adminNote}>
-                <Text style={styles.adminNoteText}>Eres el jefe de hogar. Para salirte, primero transfiere el rol a otro miembro.</Text>
-              </View>
             )}
             </Reveal>
           </>
@@ -765,21 +942,131 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  activeTaskList: {
+  templateGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  templateCard: {
+    width: '23%',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#DBE3F0',
+    backgroundColor: '#F8FAFF',
+    padding: 6,
+    gap: 4,
+  },
+  templateCardSelected: {
+    borderColor: '#1D4ED8',
+    backgroundColor: '#EEF4FF',
+  },
+  templateCardDisabled: {
+    opacity: 0.85,
+  },
+  templateThumb: {
+    height: 48,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  templateThumbText: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  templateName: {
+    color: Colors.text.primary,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
+    minHeight: 26,
+  },
+  templateMeta: {
+    color: '#475569',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  planHintBox: {
+    marginTop: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    backgroundColor: '#ECFDF5',
+    padding: Spacing.sm,
+    gap: 4,
+  },
+  planHintTitle: {
+    color: '#0F766E',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  planHintText: {
+    color: '#115E59',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  customTaskEditor: {
+    marginTop: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  customTaskTitle: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  frequencyRow: {
+    flexDirection: 'row',
     gap: Spacing.xs,
   },
-  activeTaskRow: {
+  frequencyChip: {
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+  },
+  frequencyChipActive: {
+    borderColor: '#1D4ED8',
+    backgroundColor: '#DBEAFE',
+  },
+  frequencyChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  frequencyChipTextActive: {
+    color: '#1E3A8A',
+  },
+  customTaskList: {
+    marginTop: Spacing.sm,
+    gap: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: Spacing.sm,
+  },
+  customTaskListTitle: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  customTaskRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.sm,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: BorderRadius.md,
     backgroundColor: '#F8FAFC',
     paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs + 2,
+    paddingVertical: Spacing.xs,
   },
-  activeTaskThumb: {
+  customTaskThumb: {
     width: 36,
     height: 36,
     borderRadius: BorderRadius.sm,
@@ -788,34 +1075,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeTaskThumbText: {
+  customTaskThumbText: {
     color: '#0F172A',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  activeTaskInfo: {
+  customTaskInfo: {
     flex: 1,
+    marginLeft: Spacing.sm,
   },
-  activeTaskName: {
+  customTaskName: {
     color: Colors.text.primary,
     fontSize: 13,
     fontWeight: '700',
   },
-  activeTaskFreq: {
+  customTaskFrequency: {
     color: Colors.text.secondary,
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
   },
-  deactivateButton: {
+  removeTaskButton: {
     borderRadius: BorderRadius.full,
     borderWidth: 1,
     borderColor: Colors.danger,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
   },
-  deactivateButtonText: {
+  removeTaskButtonText: {
     color: Colors.danger,
     fontSize: 12,
     fontWeight: '700',
@@ -861,6 +1149,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  transferList: {
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  transferButton: {
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#EFF6FF',
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+  },
+  transferButtonText: {
+    color: '#1E3A8A',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   buttonDisabled: {
     opacity: 0.5,
   },
@@ -873,18 +1178,5 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     fontSize: 14,
     fontWeight: '600',
-  },
-  adminNote: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
-    padding: Spacing.md,
-  },
-  adminNoteText: {
-    color: '#0F766E',
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
   },
 })

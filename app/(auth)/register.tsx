@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Image,
   TextInput,
   TouchableOpacity,
   Pressable,
@@ -77,13 +78,15 @@ export default function RegisterScreen() {
       return
     }
 
-    if (data.session) {
-      router.push('/(auth)/push-permission')
-      return
+    if (!data.session) {
+      Alert.alert(
+        'Revisa tu correo',
+        `Te enviamos un enlace de verificacion a ${trimmedEmail}. Puedes continuar por ahora y confirmarlo despues.`
+      )
     }
 
     router.replace({
-      pathname: '/(auth)/check-email',
+      pathname: '/(auth)/paywall',
       params: { email: trimmedEmail },
     })
   }
@@ -94,123 +97,132 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <StatusBar style="dark" />
+      <Image
+        source={require('../../assets/images/onboarding/register.png.png')}
+        style={styles.photoBg}
+        resizeMode="cover"
+      />
+      <View style={styles.photoVeil} />
 
-      <View style={styles.content}>
-        <Text style={styles.headline}>Crear mi cuenta</Text>
-        <Text style={styles.subtext}>Es gratis. Sin tarjeta de crédito.</Text>
+      <View style={styles.screenPadding}>
 
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre</Text>
-            <TextInput
-              style={styles.input}
-              value={firstName}
-              onChangeText={setFirstName}
-              placeholder="Tu nombre"
-              placeholderTextColor={Colors.muted}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
+        <View style={styles.content}>
+          <Text style={styles.headline}>Crear mi cuenta</Text>
+          <Text style={styles.subtext}>Es gratis. Sin tarjeta de crédito.</Text>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Apellido</Text>
-            <TextInput
-              style={styles.input}
-              value={lastName}
-              onChangeText={setLastName}
-              placeholder="Tu apellido"
-              placeholderTextColor={Colors.muted}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nombre</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Tu nombre"
+                placeholderTextColor={Colors.muted}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Genero</Text>
-            <View style={styles.genderRow}>
-              <Pressable
-                style={[styles.genderChip, gender === 'femenino' && styles.genderChipActive]}
-                onPress={() => setGender('femenino')}
-              >
-                <Text style={[styles.genderChipText, gender === 'femenino' && styles.genderChipTextActive]}>Femenino</Text>
-              </Pressable>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Apellido</Text>
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Tu apellido"
+                placeholderTextColor={Colors.muted}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
 
-              <Pressable
-                style={[styles.genderChip, gender === 'masculino' && styles.genderChipActive]}
-                onPress={() => setGender('masculino')}
-              >
-                <Text style={[styles.genderChipText, gender === 'masculino' && styles.genderChipTextActive]}>Masculino</Text>
-              </Pressable>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Genero</Text>
+              <View style={styles.genderRow}>
+                <Pressable
+                  style={[styles.genderChip, gender === 'femenino' && styles.genderChipActive]}
+                  onPress={() => setGender('femenino')}
+                >
+                  <Text style={[styles.genderChipText, gender === 'femenino' && styles.genderChipTextActive]}>Femenino</Text>
+                </Pressable>
 
-              <Pressable
-                style={[styles.genderChip, gender === 'otro' && styles.genderChipActive]}
-                onPress={() => setGender('otro')}
-              >
-                <Text style={[styles.genderChipText, gender === 'otro' && styles.genderChipTextActive]}>Otro</Text>
-              </Pressable>
+                <Pressable
+                  style={[styles.genderChip, gender === 'masculino' && styles.genderChipActive]}
+                  onPress={() => setGender('masculino')}
+                >
+                  <Text style={[styles.genderChipText, gender === 'masculino' && styles.genderChipTextActive]}>Masculino</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.genderChip, gender === 'otro' && styles.genderChipActive]}
+                  onPress={() => setGender('otro')}
+                >
+                  <Text style={[styles.genderChipText, gender === 'otro' && styles.genderChipTextActive]}>Otro</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Correo electrónico</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="tu@correo.com"
+                placeholderTextColor={Colors.muted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Contraseña</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Mínimo 6 caracteres"
+                placeholderTextColor={Colors.muted}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+              />
             </View>
           </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Correo electrónico</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="tu@correo.com"
-              placeholderTextColor={Colors.muted}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Contraseña</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Mínimo 6 caracteres"
-              placeholderTextColor={Colors.muted}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-            />
-          </View>
         </View>
-      </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading
-            ? <ActivityIndicator color={Colors.text.inverse} />
-            : <Text style={styles.primaryButtonText}>Crear cuenta</Text>
-          }
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading
+              ? <ActivityIndicator color={Colors.text.inverse} />
+              : <Text style={styles.primaryButtonText}>Crear cuenta</Text>
+            }
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => router.push('/(auth)/login')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.linkButtonText}>¿Ya tienes cuenta? Inicia sesión</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => router.push('/(auth)/login')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.linkButtonText}>¿Ya tienes cuenta? Inicia sesión</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.legalLink}
-          onPress={() => router.push('/(auth)/privacy-policy')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.legalLinkText}>Politica de privacidad</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.legalLink}
+            onPress={() => router.push('/(auth)/privacy-policy')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.legalLinkText}>Politica de privacidad</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </KeyboardAvoidingView>
   )
@@ -219,7 +231,19 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#FFF8EE',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  photoBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  photoVeil: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,248,238,0.84)',
+  },
+  screenPadding: {
+    flex: 1,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xxl,
     paddingBottom: Spacing.xl,

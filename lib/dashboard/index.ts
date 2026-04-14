@@ -1,9 +1,10 @@
 import { supabase } from '../supabase'
-import { TaskExecutionStatus, SubscriptionPlan } from '../../types'
+import { TaskExecutionStatus, SubscriptionPlan, TaskFrequency } from '../../types'
 
 export interface DashboardTaskExecution {
   id: string
   taskName: string
+  frequency: TaskFrequency
   assignedTo: string
   scheduledDate: string
   scheduledTime: string
@@ -13,6 +14,17 @@ export interface DashboardTaskExecution {
 export interface DashboardMember {
   id: string
   name: string
+}
+
+export interface HouseholdMonthTaskItem {
+  id: string
+  taskName: string
+  frequency: TaskFrequency
+  assignedTo: string
+  assignedToName: string
+  scheduledDate: string
+  scheduledTime: string
+  status: TaskExecutionStatus
 }
 
 interface DashboardContext {
@@ -65,12 +77,16 @@ function dateRangeFromMonthOffset(monthOffset: number): { start: string, end: st
 }
 
 function normalizeTaskRows(rows: any[]): DashboardTaskExecution[] {
+  const today = formatDateKey(getNow())
+
   return rows.map(row => ({
+    // Pending executions scheduled in the past are considered missed for UI analytics.
+    status: row.status === 'pending' && String(row.scheduled_date) < today ? 'missed' : row.status,
     id: row.id,
     assignedTo: row.assigned_to,
     scheduledDate: row.scheduled_date,
     scheduledTime: row.scheduled_time,
-    status: row.status,
+    frequency: row.tasks?.frequency === 'weekly' || row.tasks?.frequency === 'monthly' ? row.tasks.frequency : 'daily',
     taskName: row.tasks?.name ?? 'Tarea',
   }))
 }
@@ -96,6 +112,10 @@ function getMockHouseholdMonthSummary(monthOffset: number) {
     totalCompleted: 0,
     completionRate: 0,
   }
+}
+
+function getMockHouseholdMonthTasks(): HouseholdMonthTaskItem[] {
+  return []
 }
 
 async function resolveContext(): Promise<DashboardContext> {
@@ -271,13 +291,37 @@ export async function getMyTodayTasksAsync(): Promise<DashboardTaskExecution[]> 
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
     .eq('assigned_to', context.currentUserId)
     .eq('scheduled_date', today)
     .order('scheduled_time', { ascending: true })
 
   if (error || !data) {
     return getMyTodayTasks()
+  }
+
+  return normalizeTaskRows(data)
+}
+
+export async function getMyTomorrowTasksAsync(): Promise<DashboardTaskExecution[]> {
+  const context = await resolveContext()
+  const tomorrow = new Date(getNow())
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowKey = formatDateKey(tomorrow)
+
+  if (!context.householdId) {
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from('task_executions')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .eq('assigned_to', context.currentUserId)
+    .eq('scheduled_date', tomorrowKey)
+    .order('scheduled_time', { ascending: true })
+
+  if (error || !data) {
+    return []
   }
 
   return normalizeTaskRows(data)
@@ -310,7 +354,7 @@ export async function getMonthTasksAsync(monthOffset: number, userId?: string): 
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
     .eq('assigned_to', targetUserId)
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
@@ -338,7 +382,7 @@ export async function getHouseholdTodaySummaryAsync() {
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
     .in('assigned_to', memberIds)
     .eq('scheduled_date', today)
 
@@ -378,7 +422,7 @@ export async function getHouseholdMonthSummaryAsync(monthOffset: number) {
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
     .in('assigned_to', memberIds)
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
@@ -412,4 +456,46 @@ export async function getHouseholdMonthSummaryAsync(monthOffset: number) {
     totalCompleted,
     completionRate: totalAssigned === 0 ? 0 : Math.round((totalCompleted / totalAssigned) * 100),
   }
+}
+
+export async function getHouseholdMonthTasksAsync(monthOffset: number): Promise<HouseholdMonthTaskItem[]> {
+  const context = await resolveContext()
+
+  if (!context.householdId) {
+    return getMockHouseholdMonthTasks()
+  }
+
+  const memberIds = context.members.map(member => member.id)
+  if (memberIds.length === 0) {
+    return getMockHouseholdMonthTasks()
+  }
+
+  const { start, end } = dateRangeFromMonthOffset(monthOffset)
+
+  const { data, error } = await supabase
+    .from('task_executions')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .in('assigned_to', memberIds)
+    .gte('scheduled_date', start)
+    .lte('scheduled_date', end)
+    .order('scheduled_date', { ascending: true })
+    .order('scheduled_time', { ascending: true })
+
+  if (error || !data) {
+    return getMockHouseholdMonthTasks()
+  }
+
+  const memberNameById = new Map(context.members.map(member => [member.id, member.name]))
+  const tasks = normalizeTaskRows(data)
+
+  return tasks.map(task => ({
+    id: task.id,
+    taskName: task.taskName,
+    frequency: task.frequency,
+    assignedTo: task.assignedTo,
+    assignedToName: memberNameById.get(task.assignedTo) ?? 'Miembro',
+    scheduledDate: task.scheduledDate,
+    scheduledTime: task.scheduledTime,
+    status: task.status,
+  }))
 }

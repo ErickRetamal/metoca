@@ -71,7 +71,7 @@ export default function LoginScreen() {
       Alert.alert('No pudimos iniciar sesión', message)
       return
     }
-    // La redirección la maneja el listener en app/_layout.tsx
+    router.replace('/(auth)/paywall')
   }
 
   return (

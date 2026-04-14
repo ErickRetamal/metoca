@@ -110,6 +110,7 @@ export default function ConfigureHouseholdTasksScreen() {
   const { onMenuPress } = useMenuContext()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [redistributing, setRedistributing] = useState(false)
   const [plan, setPlan] = useState<AppPlan>('free')
   const [householdId, setHouseholdId] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -131,6 +132,14 @@ export default function ConfigureHouseholdTasksScreen() {
   const [customTaskDaysOfWeek, setCustomTaskDaysOfWeek] = useState<number[]>([1])
   const [customTaskDayOfMonth, setCustomTaskDayOfMonth] = useState(1)
   const [customExtraWeeklySlots, setCustomExtraWeeklySlots] = useState<WeeklySlotDraft[]>([])
+  const [screenFeedback, setScreenFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  function getCurrentMonthKey(): string {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}`
+  }
 
   useEffect(() => {
     let mounted = true
@@ -259,6 +268,8 @@ export default function ConfigureHouseholdTasksScreen() {
   async function handleActivateTemplate() {
     if (!householdId || !currentUserId || !templateToActivate || !isAdmin) return
 
+    setScreenFeedback(null)
+
     const notificationTime = toTimeWithSeconds(templateTimeDraft)
     if (!notificationTime) {
       Alert.alert('Horario inválido', 'Usa formato HH:MM, por ejemplo 20:00.')
@@ -300,6 +311,7 @@ export default function ConfigureHouseholdTasksScreen() {
           .eq('id', taskId)
 
         if (error) {
+          setScreenFeedback({ type: 'error', message: error.message })
           Alert.alert('Error', error.message)
           return
         }
@@ -327,6 +339,7 @@ export default function ConfigureHouseholdTasksScreen() {
           .single()
 
         if (error) {
+          setScreenFeedback({ type: 'error', message: error.message })
           Alert.alert('Error', error.message)
           return
         }
@@ -339,6 +352,7 @@ export default function ConfigureHouseholdTasksScreen() {
       }
 
       setSelectedTaskNames(prev => [...prev, templateToActivate.name])
+      setScreenFeedback({ type: 'success', message: `"${templateToActivate.name}" quedó activa.` })
       setTemplateToActivate(null)
       setTemplateExtraWeeklySlots([])
     } finally {
@@ -348,6 +362,8 @@ export default function ConfigureHouseholdTasksScreen() {
 
   async function handleAddCustomTask() {
     if (!householdId || !currentUserId || !isAdmin) return
+
+    setScreenFeedback(null)
 
     if (plan === 'free') {
       Alert.alert(
@@ -413,6 +429,7 @@ export default function ConfigureHouseholdTasksScreen() {
         .single()
 
       if (error) {
+        setScreenFeedback({ type: 'error', message: error.message })
         Alert.alert('Error', error.message)
         return
       }
@@ -431,8 +448,51 @@ export default function ConfigureHouseholdTasksScreen() {
       setCustomTaskDaysOfWeek([1])
       setCustomTaskDayOfMonth(1)
       setCustomExtraWeeklySlots([])
+      setScreenFeedback({ type: 'success', message: `Tarea "${taskName}" agregada correctamente.` })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleRedistributeTasksNow() {
+    if (!householdId || !isAdmin || redistributing) return
+
+    setScreenFeedback(null)
+
+    setRedistributing(true)
+    try {
+      const currentMonth = getCurrentMonthKey()
+      const { data, error } = await supabase.rpc('redistribute_household_tasks', {
+        p_household_id: householdId,
+        p_month: currentMonth,
+      })
+
+      if (error) {
+        const msg = (error.message ?? '').toLowerCase()
+        if (msg.includes('only_admin_can_redistribute')) {
+          setScreenFeedback({ type: 'error', message: 'Solo el jefe de hogar puede redistribuir tareas.' })
+          Alert.alert('Solo admin', 'Solo el jefe de hogar puede redistribuir tareas.')
+          return
+        }
+        if (msg.includes('no_active_members')) {
+          setScreenFeedback({ type: 'error', message: 'No hay miembros activos para distribuir tareas.' })
+          Alert.alert('Sin miembros', 'No hay miembros activos para distribuir tareas.')
+          return
+        }
+        setScreenFeedback({ type: 'error', message: error.message })
+        Alert.alert('Error al redistribuir', error.message)
+        return
+      }
+
+      const created = Number((data as any)?.executions_created ?? 0)
+      const moved = Number((data as any)?.pending_reassigned ?? 0)
+
+      setScreenFeedback({
+        type: 'success',
+        message: `OK. Pendientes reasignadas: ${moved}. Nuevas ejecuciones: ${created}.`,
+      })
+    } finally {
+      setRedistributing(false)
     }
   }
 
@@ -458,6 +518,14 @@ export default function ConfigureHouseholdTasksScreen() {
           </View>
         </Reveal>
 
+        {screenFeedback && (
+          <View style={[styles.feedbackBox, screenFeedback.type === 'success' ? styles.feedbackSuccess : styles.feedbackError]}>
+            <Text style={[styles.feedbackText, screenFeedback.type === 'success' ? styles.feedbackTextSuccess : styles.feedbackTextError]}>
+              {screenFeedback.message}
+            </Text>
+          </View>
+        )}
+
         {!householdId && (
           <View style={styles.card}>
             <Text style={styles.cardSubtitle}>No estás en un hogar activo. Únete o crea uno primero.</Text>
@@ -472,6 +540,24 @@ export default function ConfigureHouseholdTasksScreen() {
 
         {householdId && isAdmin && (
           <>
+            <Reveal delay={70}>
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Distribución de tareas</Text>
+                <Text style={styles.cardSubtitle}>
+                  Úsalo cuando entre un miembro nuevo o cuando quieras redistribuir antes del automático del día 15.
+                </Text>
+                <Pressable
+                  style={[styles.primaryButton, redistributing && styles.buttonDisabled]}
+                  onPress={handleRedistributeTasksNow}
+                  disabled={redistributing}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {redistributing ? 'Redistribuyendo...' : 'Redistribuir tareas ahora'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Reveal>
+
             <Reveal delay={90}>
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Tareas fijas disponibles</Text>
@@ -1099,5 +1185,30 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
     fontSize: 14,
     fontWeight: '700',
+  },
+  feedbackBox: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  feedbackSuccess: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  feedbackError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  feedbackText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  feedbackTextSuccess: {
+    color: '#065F46',
+  },
+  feedbackTextError: {
+    color: '#991B1B',
   },
 })

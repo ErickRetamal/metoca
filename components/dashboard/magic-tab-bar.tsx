@@ -8,6 +8,7 @@ type RouteIconName = keyof typeof Ionicons.glyphMap
 const TAB_HORIZONTAL_PADDING = 8
 const INDICATOR_SIZE = 52
 const LABEL_PILL_WIDTH = 64
+const HIDDEN_TAB_ROUTES = new Set(['task-month-detail', 'household-task-month-detail'])
 
 const OUTER_SHADOW_STYLE = Platform.select({
   web: {
@@ -78,29 +79,40 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
   const colorIndex = useRef(new Animated.Value(state.index)).current
   const iconScale = useRef(state.routes.map((_, index) => new Animated.Value(index === state.index ? 1.1 : 1))).current
 
+  const visibleRoutes = useMemo(
+    () => state.routes.filter(route => !HIDDEN_TAB_ROUTES.has(route.name)),
+    [state.routes]
+  )
+
+  const activeVisibleIndex = useMemo(() => {
+    const activeKey = state.routes[state.index]?.key
+    const found = visibleRoutes.findIndex(route => route.key === activeKey)
+    return found >= 0 ? found : 0
+  }, [state.routes, state.index, visibleRoutes])
+
   const tabWidth = useMemo(() => {
-    if (state.routes.length === 0) return 0
+    if (visibleRoutes.length === 0) return 0
     const innerWidth = Math.max(0, barWidth - TAB_HORIZONTAL_PADDING * 2)
-    return innerWidth / state.routes.length
-  }, [barWidth, state.routes.length])
+    return innerWidth / visibleRoutes.length
+  }, [barWidth, visibleRoutes.length])
 
   const activeCenter = useMemo(() => {
-    const measuredCenter = tabCenters[state.index]
+    const measuredCenter = tabCenters[activeVisibleIndex]
     if (typeof measuredCenter === 'number') {
       return measuredCenter
     }
 
     if (tabWidth <= 0) return INDICATOR_SIZE / 2
-    return TAB_HORIZONTAL_PADDING + state.index * tabWidth + tabWidth / 2
-  }, [state.index, tabWidth, tabCenters])
+    return TAB_HORIZONTAL_PADDING + activeVisibleIndex * tabWidth + tabWidth / 2
+  }, [activeVisibleIndex, tabWidth, tabCenters])
 
-  const accentColors = useMemo(() => state.routes.map(route => resolveAccentColor(route.name)), [state.routes])
-  const activeRouteName = state.routes[state.index]?.name ?? 'today'
+  const accentColors = useMemo(() => visibleRoutes.map(route => resolveAccentColor(route.name)), [visibleRoutes])
+  const activeRouteName = visibleRoutes[activeVisibleIndex]?.name ?? visibleRoutes[0]?.name ?? 'today'
   const activeIconName = resolveIconName(activeRouteName, true)
 
   const indicatorColor = colorIndex.interpolate({
-    inputRange: state.routes.map((_, index) => index),
-    outputRange: accentColors,
+    inputRange: accentColors.map((_, index) => index),
+    outputRange: accentColors.length > 0 ? accentColors : [Colors.primary],
   })
 
   useEffect(() => {
@@ -114,11 +126,11 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
 
   useEffect(() => {
     Animated.timing(colorIndex, {
-      toValue: state.index,
+      toValue: activeVisibleIndex,
       duration: 220,
       useNativeDriver: false,
     }).start()
-  }, [colorIndex, state.index])
+  }, [colorIndex, activeVisibleIndex])
 
   useEffect(() => {
     const animations = iconScale.map((value, index) =>
@@ -162,8 +174,9 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
               </View>
             </Animated.View>
 
-            {state.routes.map((route, index) => {
-              const focused = state.index === index
+            {visibleRoutes.map((route, index) => {
+              const routeIndex = state.routes.findIndex(item => item.key === route.key)
+              const focused = state.index === routeIndex
               const { options } = descriptors[route.key]
 
               const onPress = () => {
@@ -210,7 +223,7 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
                     })
                   }}
                 >
-                  <Animated.View style={[styles.iconWrap, { transform: [{ scale: iconScale[index] }] }]}>
+                  <Animated.View style={[styles.iconWrap, { transform: [{ scale: routeIndex >= 0 ? iconScale[routeIndex] : 1 }] }]}>
                     <Ionicons name={iconName} size={22} color={tintColor} />
                   </Animated.View>
                 </Pressable>

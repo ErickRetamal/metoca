@@ -15,4 +15,4 @@ foreach ($port in $ports) {
 }
 
 Set-Location $PSScriptRoot
-npx expo start --web -c
+npx expo start --web --host lan -c

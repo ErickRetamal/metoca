@@ -7,11 +7,10 @@ initializePurchases()
 
 export default function RootLayout() {
   useEffect(() => {
-    // Escuchar cambios de sesión y redirigir según estado de autenticación
+    // Mantener solo redirección de cierre de sesión para evitar
+    // sobreescribir flujos específicos (ej. login -> paywall).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        router.replace('/(app)/(tabs)/today')
-      } else if (event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_OUT') {
         router.replace('/(auth)/welcome')
       }
     })

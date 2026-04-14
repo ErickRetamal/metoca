@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, Spacing } from '../../../constants/theme'
 import { supabase } from '../../../lib/supabase'
@@ -83,6 +84,12 @@ function getStatusColor(status: 'pending' | 'completed' | 'missed'): string {
   return Colors.warning
 }
 
+function formatFrequencyLabel(frequency: 'daily' | 'weekly' | 'monthly'): string {
+  if (frequency === 'daily') return 'Diaria'
+  if (frequency === 'weekly') return 'Semanal'
+  return 'Mensual'
+}
+
 function computeStreak(tasks: Array<{ status: 'pending' | 'completed' | 'missed'; scheduledDate: string }>): number {
   if (tasks.length === 0) return 0
 
@@ -109,6 +116,7 @@ function computeStreak(tasks: Array<{ status: 'pending' | 'completed' | 'missed'
 }
 
 export default function MyMonthScreen() {
+  const insets = useSafeAreaInsets()
   const params = useLocalSearchParams<{ memberId?: string, memberName?: string }>()
   const [monthOffset, setMonthOffset] = useState(0)
   const [plan, setPlan] = useState(CURRENT_PLAN)
@@ -176,6 +184,56 @@ export default function MyMonthScreen() {
   const previousMonthCompletion = historyStats[0]?.completion ?? 0
   const completionDelta = progress - previousMonthCompletion
 
+  const taskGroups = useMemo(() => {
+    const grouped = new Map<string, {
+      key: string
+      taskName: string
+      frequency: 'daily' | 'weekly' | 'monthly'
+      total: number
+      completed: number
+      pending: number
+      missed: number
+      executions: typeof tasks
+    }>()
+
+    for (const task of tasks) {
+      const frequency = task.frequency ?? 'daily'
+      const key = `${task.taskName}::${frequency}`
+      const current = grouped.get(key) ?? {
+        key,
+        taskName: task.taskName,
+        frequency,
+        total: 0,
+        completed: 0,
+        pending: 0,
+        missed: 0,
+        executions: [],
+      }
+
+      current.total += 1
+      if (task.status === 'completed') current.completed += 1
+      if (task.status === 'pending') current.pending += 1
+      if (task.status === 'missed') current.missed += 1
+      current.executions.push(task)
+
+      grouped.set(key, current)
+    }
+
+    return Array.from(grouped.values())
+      .map(group => ({
+        ...group,
+        executions: [...group.executions].sort((a, b) => {
+          const byDate = a.scheduledDate.localeCompare(b.scheduledDate)
+          if (byDate !== 0) return byDate
+          return a.scheduledTime.localeCompare(b.scheduledTime)
+        }),
+      }))
+      .sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total
+        return a.taskName.localeCompare(b.taskName)
+      })
+  }, [tasks])
+
   const canNavigateHistory = plan !== 'free'
 
   useEffect(() => {
@@ -218,6 +276,19 @@ export default function MyMonthScreen() {
     }
   }, [canNavigateHistory, monthOffset, memberId])
 
+  const openTaskDetail = (taskName: string, frequency: 'daily' | 'weekly' | 'monthly') => {
+    router.push({
+      pathname: '/(app)/(tabs)/task-month-detail',
+      params: {
+        monthOffset: String(monthOffset),
+        taskName,
+        frequency,
+        ...(memberId ? { memberId } : {}),
+        ...(memberName ? { memberName } : {}),
+      },
+    })
+  }
+
   const moveMonth = (direction: -1 | 1) => {
     if (!canNavigateHistory && direction !== 0) {
       Alert.alert(
@@ -239,7 +310,7 @@ export default function MyMonthScreen() {
       <View style={styles.bgShapeTop} />
       <View style={styles.bgShapeBottom} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerCard}>
           <View style={styles.titleRow}>
             <View>
@@ -270,7 +341,7 @@ export default function MyMonthScreen() {
 
         <View style={styles.fitnessCard}>
           <View style={styles.fitnessHeaderRow}>
-            <Text style={styles.fitnessTitle}>Estadisticas estilo fitness</Text>
+            <Text style={styles.fitnessTitle}>Indicadores del mes</Text>
             <Text style={styles.fitnessSubtitle}>{monthLabel}</Text>
           </View>
 
@@ -345,19 +416,31 @@ export default function MyMonthScreen() {
         </View>
 
         <View style={styles.listCard}>
-          <Text style={styles.sectionTitle}>Tareas del mes</Text>
+          <Text style={styles.sectionTitle}>Tareas del mes (resumen)</Text>
 
-          {tasks.length === 0 ? (
+          {taskGroups.length === 0 ? (
             <Text style={styles.emptyText}>No hay tareas para este mes.</Text>
           ) : (
-            tasks.map(task => (
-              <View key={task.id} style={styles.row}>
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(task.status) }]} />
-                <Text style={styles.status}>{getStatusSymbol(task.status)}</Text>
-                <Text style={styles.taskName}>{task.taskName}</Text>
-                <Text style={styles.day}>{formatDayLabel(task.scheduledDate)}</Text>
-              </View>
-            ))
+            <View style={styles.groupList}>
+              {taskGroups.map(group => {
+                const completionPct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
+                return (
+                  <Pressable
+                    key={group.key}
+                    style={styles.groupRow}
+                    onPress={() => openTaskDetail(group.taskName, group.frequency)}
+                  >
+                    <View style={styles.groupMain}>
+                      <Text style={styles.groupTaskName}>{group.taskName}</Text>
+                      <Text style={styles.groupMeta}>
+                        {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {completionPct}%
+                      </Text>
+                    </View>
+                    <Text style={styles.groupDetailCta}>Abrir detalle</Text>
+                  </Pressable>
+                )
+              })}
+            </View>
           )}
         </View>
 
@@ -666,6 +749,84 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontSize: 14,
     paddingVertical: Spacing.md,
+  },
+  groupList: {
+    gap: Spacing.xs,
+  },
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#FBFDFF',
+  },
+  groupRowSelected: {
+    borderColor: '#93C5FD',
+    backgroundColor: '#EFF6FF',
+  },
+  groupMain: {
+    flex: 1,
+    gap: 2,
+  },
+  groupTaskName: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  groupMeta: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+  },
+  groupDetailCta: {
+    color: '#1E3A8A',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  detailCard: {
+    marginTop: Spacing.sm,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#F8FAFF',
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  detailTitle: {
+    color: Colors.text.primary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  detailMeta: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  detailDay: {
+    flex: 1,
+    color: Colors.text.primary,
+    fontSize: 12,
+    textTransform: 'capitalize',
+  },
+  detailTime: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',

@@ -15,7 +15,9 @@ import {
   getCurrentUserAsync,
   getMyTodayTasks,
   getMyTodayTasksAsync,
+  getMyTomorrowTasksAsync,
   markTaskAsCompletedAsync,
+  DashboardTaskExecution,
 } from '../../../lib/dashboard'
 
 function formatLongDate(date: Date): string {
@@ -46,8 +48,11 @@ function getStatusLabel(status: 'pending' | 'completed' | 'missed'): string {
 
 export default function TodayScreen() {
   const [tasks, setTasks] = useState(getMyTodayTasks())
+  const [tomorrowTasks, setTomorrowTasks] = useState<DashboardTaskExecution[]>([])
   const [currentPlan, setCurrentPlan] = useState(CURRENT_PLAN)
   const [currentUserName, setCurrentUserName] = useState(getCurrentUser().name)
+  const [taskActionFeedback, setTaskActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null)
   const { onMenuPress } = useMenuContext()
 
   const formattedDate = useMemo(() => formatLongDate(getCurrentDate()), [])
@@ -56,16 +61,18 @@ export default function TodayScreen() {
     let mounted = true
 
     async function loadToday() {
-      const [plan, user, todayTasks] = await Promise.all([
+      const [plan, user, todayTasks, tomorrowTasksData] = await Promise.all([
         getCurrentPlanAsync(),
         getCurrentUserAsync(),
         getMyTodayTasksAsync(),
+        getMyTomorrowTasksAsync(),
       ])
 
       if (!mounted) return
       setCurrentPlan(plan)
       setCurrentUserName(user.name)
       setTasks(todayTasks)
+      setTomorrowTasks(tomorrowTasksData)
     }
 
     loadToday()
@@ -91,29 +98,27 @@ export default function TodayScreen() {
   const completedCount = tasks.filter(task => task.status === 'completed').length
   const progress = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100)
 
-  const handleTaskPress = (taskId: string, status: 'pending' | 'completed' | 'missed') => {
-    if (status !== 'pending') return
+  const handleTaskPress = async (taskId: string, status: 'pending' | 'completed' | 'missed', taskName: string) => {
+    if (status !== 'pending' || completingTaskId) return
 
-    if (currentPlan === 'free') {
-      Alert.alert(
-        'Plan Gratis',
-        'En el plan gratis se muestra un anuncio antes de marcar la tarea como hecha.',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Ver planes', onPress: () => goToPaywall('today-free-alert') },
-          {
-            text: 'Marcar como hecha',
-            onPress: async () => {
-              const next = await markTaskAsCompletedAsync(taskId)
-              setTasks(next)
-            },
-          },
-        ]
-      )
-      return
+    setTaskActionFeedback(null)
+    setCompletingTaskId(taskId)
+
+    try {
+      const next = await markTaskAsCompletedAsync(taskId)
+      setTasks(next)
+
+      const updatedTask = next.find(task => task.id === taskId)
+      if (updatedTask?.status === 'completed') {
+        setTaskActionFeedback({ type: 'success', message: `OK: "${taskName}" marcada como completada.` })
+      } else {
+        setTaskActionFeedback({ type: 'error', message: 'No se pudo marcar la tarea. Reintenta.' })
+      }
+    } catch {
+      setTaskActionFeedback({ type: 'error', message: 'Error inesperado al marcar la tarea.' })
+    } finally {
+      setCompletingTaskId(null)
     }
-
-    markTaskAsCompletedAsync(taskId).then(setTasks)
   }
 
   return (
@@ -174,6 +179,18 @@ export default function TodayScreen() {
         <View style={styles.listCard}>
           <Text style={styles.sectionTitle}>Agenda del dia</Text>
 
+          {taskActionFeedback && (
+            <View style={[
+              styles.feedbackBox,
+              taskActionFeedback.type === 'success' ? styles.feedbackSuccessBox : styles.feedbackErrorBox,
+            ]}>
+              <Text style={[
+                styles.feedbackText,
+                taskActionFeedback.type === 'success' ? styles.feedbackSuccessText : styles.feedbackErrorText,
+              ]}>{taskActionFeedback.message}</Text>
+            </View>
+          )}
+
           {tasks.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <Text style={styles.emptyStateIcon}>📭</Text>
@@ -183,10 +200,9 @@ export default function TodayScreen() {
             </View>
           ) : (
             tasks.map(task => (
-              <Pressable
+              <View
                 key={task.id}
                 style={[styles.taskRow, task.status === 'completed' && styles.taskRowCompleted]}
-                onPress={() => handleTaskPress(task.id, task.status)}
               >
                 <View style={[styles.statusDot, { backgroundColor: getStatusColor(task.status) }]} />
 
@@ -199,13 +215,40 @@ export default function TodayScreen() {
                   <Text style={[styles.status, { color: getStatusColor(task.status) }]}>{getStatusSymbol(task.status)}</Text>
                   <Text style={styles.taskTime}>{task.scheduledTime}</Text>
                 </View>
-              </Pressable>
+
+                {task.status === 'pending' && (
+                  <Pressable
+                    style={[styles.completeButton, completingTaskId === task.id && styles.completeButtonDisabled]}
+                    onPress={() => handleTaskPress(task.id, task.status, task.taskName)}
+                    disabled={completingTaskId === task.id}
+                  >
+                    <Text style={styles.completeButtonText}>{completingTaskId === task.id ? 'Guardando...' : 'Realizada'}</Text>
+                  </Pressable>
+                )}
+              </View>
             ))
           )}
         </View>
         </Reveal>
 
-        <Reveal delay={160}>
+        {tomorrowTasks.length > 0 && (
+          <Reveal delay={200}>
+            <View style={styles.tomorrowCard}>
+              <Text style={styles.tomorrowTitle}>Mañana</Text>
+              {tomorrowTasks.map(task => (
+                <View key={task.id} style={styles.tomorrowRow}>
+                  <View style={styles.tomorrowDot} />
+                  <View style={styles.tomorrowTaskInfo}>
+                    <Text style={styles.tomorrowTaskName}>{task.taskName}</Text>
+                    <Text style={styles.tomorrowTaskMeta}>{task.scheduledTime}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </Reveal>
+        )}
+
+        <Reveal delay={240}>
           <TouchableOpacity
             style={styles.swapButton}
             onPress={() => router.push('/(app)/swap/request')}
@@ -227,7 +270,53 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.lg,
     gap: Spacing.md,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: 120,
+  },
+  tomorrowCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    gap: Spacing.xs,
+    ...ShadowPresets.soft,
+  },
+  tomorrowTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.xs,
+  },
+  tomorrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  tomorrowDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.muted,
+  },
+  tomorrowTaskInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tomorrowTaskName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text.primary,
+  },
+  tomorrowTaskMeta: {
+    fontSize: 12,
+    color: Colors.text.secondary,
   },
   bgShapeTop: {
     position: 'absolute',
@@ -442,6 +531,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderColor: '#DCE8F6',
   },
+  completeButton: {
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+    backgroundColor: '#EFF6FF',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+  },
+  completeButtonText: {
+    color: '#1E3A8A',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  completeButtonDisabled: {
+    opacity: 0.6,
+  },
   statusDot: {
     width: 10,
     height: 10,
@@ -475,6 +580,32 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontSize: 12,
     fontWeight: '600',
+  },
+  feedbackBox: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  feedbackSuccessBox: {
+    borderColor: '#A7F3D0',
+    backgroundColor: '#ECFDF5',
+  },
+  feedbackErrorBox: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  feedbackText: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  feedbackSuccessText: {
+    color: '#065F46',
+  },
+  feedbackErrorText: {
+    color: '#991B1B',
   },
   swapButton: {
     backgroundColor: '#1E3A8A',

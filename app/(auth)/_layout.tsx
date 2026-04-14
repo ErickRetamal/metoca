@@ -7,11 +7,11 @@ export default function AuthLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: 'fade_from_bottom',
+          animation: 'slide_from_right',
           contentStyle: { backgroundColor: 'transparent' },
         }}
       >
-        <Stack.Screen name="welcome" />
+        <Stack.Screen name="welcome" options={{ animation: 'none' }} />
         <Stack.Screen name="value-prop" />
         <Stack.Screen name="how-it-works" />
         <Stack.Screen name="register" />
