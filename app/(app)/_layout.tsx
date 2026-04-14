@@ -1,13 +1,55 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Stack, usePathname } from 'expo-router'
 import { StyleSheet, View } from 'react-native'
 import { SideMenu, type DashboardMenuSection } from '../../components/dashboard/side-menu'
 import { LayoutShell } from '../../components/ui/layout-shell'
 import { MenuContext } from '../../lib/menu-context'
+import { supabase } from '../../lib/supabase'
 
 export default function AppLayout() {
   const pathname = usePathname()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [canManageTasks, setCanManageTasks] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadTaskManagementAccess() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        if (mounted) setCanManageTasks(false)
+        return
+      }
+
+      const { data: membership } = await supabase
+        .from('household_members')
+        .select('household_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle()
+
+      if (!membership?.household_id) {
+        if (mounted) setCanManageTasks(false)
+        return
+      }
+
+      const { data: householdRow } = await supabase
+        .from('households')
+        .select('admin_user_id')
+        .eq('id', membership.household_id)
+        .maybeSingle()
+
+      if (!mounted) return
+      setCanManageTasks(Boolean(householdRow?.admin_user_id && householdRow.admin_user_id === user.id))
+    }
+
+    void loadTaskManagementAccess()
+
+    return () => {
+      mounted = false
+    }
+  }, [pathname])
 
   const currentSection = useMemo<DashboardMenuSection>(() => {
     if (pathname.includes('/configure-tasks')) return 'tasks'
@@ -25,6 +67,7 @@ export default function AppLayout() {
             visible={isMenuOpen}
             onClose={() => setIsMenuOpen(false)}
             currentSection={currentSection}
+            canManageTasks={canManageTasks}
           />
 
           <Stack

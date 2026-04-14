@@ -204,9 +204,22 @@ export default function ConfigureHouseholdTasksScreen() {
             frequency: row.frequency as TaskFrequency,
           }))
 
+        const adminAccess = Boolean(householdRow?.admin_user_id && householdRow.admin_user_id === user.id)
+
         setSelectedTaskNames(names)
         setCustomTasks(loadedCustom)
-        setIsAdmin(Boolean(householdRow?.admin_user_id && householdRow.admin_user_id === user.id))
+        setIsAdmin(adminAccess)
+
+        if (!adminAccess) {
+          const message = 'Solo el jefe de hogar puede configurar tareas.'
+          if (Platform.OS === 'web') {
+            ;(globalThis as any).alert?.(message)
+          } else {
+            Alert.alert('Acceso restringido', message)
+          }
+          router.replace('/(app)/household')
+          return
+        }
       } finally {
         if (mounted) setLoading(false)
       }

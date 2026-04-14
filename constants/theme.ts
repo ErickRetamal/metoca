@@ -1,34 +1,34 @@
 import { Platform } from 'react-native'
 
 export const Colors = {
-  primary: '#4F46E5',     // Indigo — acción principal
-  success: '#16A34A',     // Verde — tarea completada
-  warning: '#D97706',     // Amarillo — tarea pendiente
-  danger: '#DC2626',      // Rojo — tarea missed / alerta
-  muted: '#9CA3AF',       // Gris — elementos secundarios
+  primary: '#B45309',     // Terracota — acción principal
+  success: '#3F7D58',     // Verde salvia — tarea completada
+  warning: '#C57B2A',     // Ámbar cálido — tarea pendiente
+  danger: '#B84032',      // Rojo arcilla — alerta
+  muted: '#A08A7A',       // Marrón suave — elementos secundarios
 
-  background: '#F9FAFB',
+  background: '#FFF8F1',
   surface: '#FFFFFF',
-  border: '#E5E7EB',
+  border: '#EADFCC',
 
   text: {
-    primary: '#111827',
-    secondary: '#6B7280',
+    primary: '#2F241F',
+    secondary: '#7A6758',
     inverse: '#FFFFFF',
   },
 
   // Colores por miembro del hogar (hasta 10)
   members: [
-    '#4F46E5', // Indigo
-    '#0891B2', // Cyan
-    '#16A34A', // Verde
-    '#D97706', // Naranja
-    '#DC2626', // Rojo
-    '#7C3AED', // Violeta
-    '#DB2777', // Rosa
-    '#65A30D', // Lima
-    '#0284C7', // Azul
-    '#9D174D', // Fucsia
+    '#C96B2C', // Terracota
+    '#5D8A64', // Salvia
+    '#B6493A', // Coral quemado
+    '#8F5B3E', // Cobre
+    '#6F8C52', // Oliva
+    '#A56E45', // Arcilla
+    '#8A6B95', // Ciruela suave
+    '#4C8A82', // Verde agua cálido
+    '#D28E4D', // Miel
+    '#7B5A4A', // Café tostado
   ],
 } as const
 
@@ -50,70 +50,70 @@ export const BorderRadius = {
 
 export const LayoutThemes = {
   auth: {
-    background: '#07111F',
-    veil: 'rgba(8, 15, 30, 0.78)',
-    frame: 'rgba(148, 163, 184, 0.14)',
-    orbPrimary: 'rgba(37, 99, 235, 0.24)',
-    orbSecondary: 'rgba(20, 184, 166, 0.18)',
-    orbAccent: 'rgba(124, 58, 237, 0.16)',
+    background: '#2E1A11',
+    veil: 'rgba(46, 26, 17, 0.72)',
+    frame: 'rgba(244, 220, 195, 0.16)',
+    orbPrimary: 'rgba(201, 107, 44, 0.26)',
+    orbSecondary: 'rgba(93, 138, 100, 0.2)',
+    orbAccent: 'rgba(182, 73, 58, 0.18)',
     statusBar: 'light' as const,
   },
   app: {
-    background: '#F4F7FB',
-    veil: 'rgba(255, 255, 255, 0.58)',
-    frame: 'rgba(148, 163, 184, 0.2)',
-    orbPrimary: 'rgba(79, 70, 229, 0.12)',
-    orbSecondary: 'rgba(14, 165, 164, 0.1)',
-    orbAccent: 'rgba(234, 88, 12, 0.1)',
+    background: '#FFF6EC',
+    veil: 'rgba(255, 250, 244, 0.64)',
+    frame: 'rgba(180, 128, 90, 0.2)',
+    orbPrimary: 'rgba(201, 107, 44, 0.14)',
+    orbSecondary: 'rgba(93, 138, 100, 0.12)',
+    orbAccent: 'rgba(182, 73, 58, 0.12)',
     statusBar: 'dark' as const,
   },
   swap: {
-    background: '#F2F7FF',
-    veil: 'rgba(255, 255, 255, 0.62)',
-    frame: 'rgba(125, 211, 252, 0.24)',
-    orbPrimary: 'rgba(14, 116, 144, 0.12)',
-    orbSecondary: 'rgba(37, 99, 235, 0.12)',
-    orbAccent: 'rgba(16, 185, 129, 0.1)',
+    background: '#FFF4E8',
+    veil: 'rgba(255, 248, 240, 0.66)',
+    frame: 'rgba(201, 107, 44, 0.22)',
+    orbPrimary: 'rgba(182, 73, 58, 0.14)',
+    orbSecondary: 'rgba(93, 138, 100, 0.12)',
+    orbAccent: 'rgba(143, 91, 62, 0.12)',
     statusBar: 'dark' as const,
   },
 } as const
 
 export const ShadowPresets = {
   card: Platform.select({
-    web: { boxShadow: '0px 10px 30px rgba(15, 23, 42, 0.08)' },
+    web: { boxShadow: '0px 10px 30px rgba(90, 64, 45, 0.12)' },
     default: {
-      shadowColor: '#111827',
-      shadowOpacity: 0.08,
+      shadowColor: '#5A402D',
+      shadowOpacity: 0.12,
       shadowRadius: 18,
       shadowOffset: { width: 0, height: 8 },
       elevation: 4,
     },
   }),
   soft: Platform.select({
-    web: { boxShadow: '0px 6px 16px rgba(15, 23, 42, 0.05)' },
+    web: { boxShadow: '0px 6px 16px rgba(90, 64, 45, 0.08)' },
     default: {
-      shadowColor: '#111827',
-      shadowOpacity: 0.05,
+      shadowColor: '#5A402D',
+      shadowOpacity: 0.08,
       shadowRadius: 12,
       shadowOffset: { width: 0, height: 4 },
       elevation: 3,
     },
   }),
   primary: Platform.select({
-    web: { boxShadow: '0px 10px 24px rgba(30, 58, 138, 0.22)' },
+    web: { boxShadow: '0px 10px 24px rgba(180, 83, 9, 0.3)' },
     default: {
-      shadowColor: '#1E3A8A',
-      shadowOpacity: 0.22,
+      shadowColor: '#B45309',
+      shadowOpacity: 0.3,
       shadowRadius: 12,
       shadowOffset: { width: 0, height: 6 },
       elevation: 4,
     },
   }),
   danger: Platform.select({
-    web: { boxShadow: '0px 10px 24px rgba(220, 38, 38, 0.18)' },
+    web: { boxShadow: '0px 10px 24px rgba(184, 64, 50, 0.22)' },
     default: {
-      shadowColor: '#DC2626',
-      shadowOpacity: 0.18,
+      shadowColor: '#B84032',
+      shadowOpacity: 0.22,
       shadowRadius: 12,
       shadowOffset: { width: 0, height: 6 },
       elevation: 4,

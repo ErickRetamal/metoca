@@ -15,4 +15,16 @@ foreach ($port in $ports) {
 }
 
 Set-Location $PSScriptRoot
+
+$cachePaths = @(
+  ".expo",
+  "node_modules\\.cache\\metro"
+)
+
+foreach ($cachePath in $cachePaths) {
+  if (Test-Path $cachePath) {
+    Remove-Item -Path $cachePath -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 npx expo start --web --host lan -c

@@ -14,6 +14,7 @@ interface SideMenuProps {
   visible: boolean
   onClose: () => void
   currentSection: DashboardMenuSection
+  canManageTasks?: boolean
 }
 
 interface HamburgerButtonProps {
@@ -35,7 +36,7 @@ const MENU_ITEMS: Array<{
   { key: 'settings', label: 'Configuración', badge: 'CF', path: '/(app)/settings' },
 ]
 
-export function SideMenu({ visible, onClose, currentSection }: SideMenuProps) {
+export function SideMenu({ visible, onClose, currentSection, canManageTasks = false }: SideMenuProps) {
   const [isMounted, setIsMounted] = useState(visible)
   const slideX = useRef(new Animated.Value(-PANEL_WIDTH)).current
   const backdropOpacity = useRef(new Animated.Value(0)).current
@@ -97,6 +98,10 @@ export function SideMenu({ visible, onClose, currentSection }: SideMenuProps) {
     }, 40)
   }
 
+  const visibleMenuItems = canManageTasks
+    ? MENU_ITEMS
+    : MENU_ITEMS.filter(item => item.key !== 'tasks')
+
   return (
     <Modal
       visible={isMounted}
@@ -116,7 +121,7 @@ export function SideMenu({ visible, onClose, currentSection }: SideMenuProps) {
           <Text style={styles.menuSubtitle}>Navegacion del dashboard</Text>
 
           <View style={styles.menuOptions}>
-            {MENU_ITEMS.map(item => {
+            {visibleMenuItems.map(item => {
               const isActive = currentSection === item.key
 
               return (

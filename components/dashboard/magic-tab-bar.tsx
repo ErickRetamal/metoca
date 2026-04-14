@@ -12,11 +12,11 @@ const HIDDEN_TAB_ROUTES = new Set(['task-month-detail', 'household-task-month-de
 
 const OUTER_SHADOW_STYLE = Platform.select({
   web: {
-    boxShadow: '0px 8px 18px rgba(15, 23, 42, 0.14)',
+    boxShadow: '0px 8px 18px rgba(90, 64, 45, 0.16)',
   },
   default: {
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.14,
+    shadowColor: '#5A402D',
+    shadowOpacity: 0.16,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 10,
@@ -25,11 +25,11 @@ const OUTER_SHADOW_STYLE = Platform.select({
 
 const INDICATOR_SHADOW_STYLE = Platform.select({
   web: {
-    boxShadow: '0px 5px 10px rgba(30, 58, 138, 0.28)',
+    boxShadow: '0px 5px 10px rgba(180, 83, 9, 0.32)',
   },
   default: {
-    shadowColor: '#1E3A8A',
-    shadowOpacity: 0.28,
+    shadowColor: '#B45309',
+    shadowOpacity: 0.32,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
     elevation: 8,
@@ -57,10 +57,10 @@ function resolveIconName(routeName: string, focused: boolean): RouteIconName {
 }
 
 function resolveAccentColor(routeName: string): string {
-  if (routeName === 'today') return '#2563EB'
-  if (routeName === 'my-month') return '#7C3AED'
-  if (routeName === 'household-today') return '#0EA5A4'
-  if (routeName === 'household-month') return '#EA580C'
+  if (routeName === 'today') return '#C96B2C'
+  if (routeName === 'my-month') return '#8F5B3E'
+  if (routeName === 'household-today') return '#5D8A64'
+  if (routeName === 'household-month') return '#B6493A'
   return Colors.primary
 }
 
@@ -199,7 +199,7 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
               }
 
               const iconName = resolveIconName(route.name, focused)
-              const tintColor = focused ? 'transparent' : '#64748B'
+              const tintColor = focused ? 'transparent' : '#8E7869'
               const accessibilityLabel = options.tabBarAccessibilityLabel ?? options.title ?? route.name
 
               return (
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#D6DEEE',
+    borderColor: '#E7D6C4',
     minHeight: 74,
     paddingHorizontal: 8,
     overflow: 'visible',
@@ -287,14 +287,14 @@ const styles = StyleSheet.create({
     bottom: -15,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: '#D6DEEE',
-    backgroundColor: '#F8FAFC',
+    borderColor: '#E7D6C4',
+    backgroundColor: '#FFF8F1',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
   },
   activeLabelPillText: {
-    color: '#334155',
+    color: '#5A402D',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.2,

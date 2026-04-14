@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import { BorderRadius, Colors, Spacing, ShadowPresets } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
@@ -226,50 +227,37 @@ export default function HouseholdScreen() {
   async function handleJoin() {
     const code = inviteCodeDraft.trim().toUpperCase()
     if (!code) {
-      Alert.alert('Codigo requerido', 'Escribe el codigo de invitacion.')
+      const message = 'Escribe el codigo de invitacion.'
+      if (Platform.OS === 'web') {
+        ;(globalThis as any).alert?.(message)
+      } else {
+        Alert.alert('Codigo requerido', message)
+      }
       return
     }
     if (!currentUserId) return
     setSaving(true)
     try {
-      const { data: found, error: findError } = await supabase
-        .from('households')
-        .select('id, name')
-        .eq('invite_code', code)
-        .maybeSingle()
+      const { error } = await supabase.rpc('join_household_by_invite_code', {
+        p_invite_code: code,
+      })
 
-      if (findError || !found) {
-        Alert.alert('Codigo invalido', 'No encontramos un hogar con ese codigo.')
+      if (error) {
+        const msg = (error.message ?? '').toLowerCase()
+        const invalidCode = msg.includes('invalid_invite_code')
+        const missingRpc = msg.includes('join_household_by_invite_code') && msg.includes('does not exist')
+        const text = invalidCode
+          ? 'No encontramos un hogar con ese codigo.'
+          : missingRpc
+            ? 'Falta aplicar migraciones en la base de datos. Ejecuta las migraciones de Supabase y vuelve a intentar.'
+          : error.message
+
+        if (Platform.OS === 'web') {
+          ;(globalThis as any).alert?.(text)
+        } else {
+          Alert.alert(invalidCode ? 'Codigo invalido' : missingRpc ? 'Migraciones pendientes' : 'Error', text)
+        }
         return
-      }
-
-      // Check if already member
-      const { data: existing } = await supabase
-        .from('household_members')
-        .select('id, status')
-        .eq('household_id', found.id)
-        .eq('user_id', currentUserId)
-        .maybeSingle()
-
-      if (existing) {
-        if (existing.status === 'active') {
-          Alert.alert('Ya eres miembro', `Ya formas parte de "${found.name}".`)
-          return
-        }
-        // Re-activate if removed
-        await supabase
-          .from('household_members')
-          .update({ status: 'active', joined_at: new Date().toISOString() })
-          .eq('id', existing.id)
-      } else {
-        const { error: joinError } = await supabase
-          .from('household_members')
-          .insert({ household_id: found.id, user_id: currentUserId, status: 'active', joined_at: new Date().toISOString() })
-
-        if (joinError) {
-          Alert.alert('Error', joinError.message)
-          return
-        }
       }
 
       setInviteCodeDraft('')
@@ -283,39 +271,84 @@ export default function HouseholdScreen() {
   async function handleLeave() {
     if (!household || !currentUserId) return
 
-    if (household.adminUserId === currentUserId) {
-      Alert.alert('Eres el administrador', 'No puedes salirte siendo jefe. Transfiere el rol o elimina el hogar.')
+    const isAdminMember = household.adminUserId === currentUserId
+    const isOnlyMember = isAdminMember && household.members.length === 1
+
+    const executeLeaveRpc = async () => {
+      setSaving(true)
+      try {
+        const { data, error } = await supabase.rpc('leave_or_delete_household', {
+          p_household_id: household.id,
+        })
+
+        if (error) {
+          const msg = (error.message ?? '').toLowerCase()
+          if (msg.includes('transfer_required')) {
+            const transferMessage = 'Primero debes transferir la jefatura para poder salir del hogar.'
+            if (Platform.OS === 'web') {
+              ;(globalThis as any).alert?.(transferMessage)
+            } else {
+              Alert.alert('Transferencia requerida', transferMessage)
+            }
+            return
+          }
+
+          if (Platform.OS === 'web') {
+            ;(globalThis as any).alert?.(error.message)
+          } else {
+            Alert.alert('Error', error.message)
+          }
+          return
+        }
+
+        setHousehold(null)
+        invalidateDashboardContextCache()
+
+        const mode = (data as any)?.mode
+        if (mode === 'deleted_and_left') {
+          const successMessage = 'Abandonaste y eliminaste el hogar correctamente.'
+          if (Platform.OS === 'web') {
+            ;(globalThis as any).alert?.(successMessage)
+          } else {
+            Alert.alert('Listo', successMessage)
+          }
+        }
+      } finally {
+        setSaving(false)
+      }
+    }
+
+    if (isAdminMember && !isOnlyMember) {
+      const message = 'No puedes salirte siendo jefe. Transfiere el rol o elimina el hogar.'
+      if (Platform.OS === 'web') {
+        ;(globalThis as any).alert?.(message)
+      } else {
+        Alert.alert('Eres el administrador', message)
+      }
+      return
+    }
+
+    if (Platform.OS === 'web') {
+      const question = isOnlyMember
+        ? `Eres el único miembro. ¿Abandonar y eliminar "${household.name}"?`
+        : `¿Salir de "${household.name}"?`
+      const confirmed = (globalThis as any).confirm?.(question) ?? false
+      if (!confirmed) return
+      await executeLeaveRpc()
       return
     }
 
     Alert.alert(
-      'Salir del hogar',
-      `¿Salir de "${household.name}"?`,
+      isOnlyMember ? 'Abandonar y eliminar hogar' : 'Salir del hogar',
+      isOnlyMember
+        ? `Eres el único miembro. Esta acción eliminará "${household.name}".`
+        : `¿Salir de "${household.name}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Salir',
+          text: isOnlyMember ? 'Abandonar y eliminar' : 'Salir',
           style: 'destructive',
-          onPress: async () => {
-            setSaving(true)
-            try {
-              const { error } = await supabase
-                .from('household_members')
-                .update({ status: 'removed' })
-                .eq('household_id', household.id)
-                .eq('user_id', currentUserId)
-
-              if (error) {
-                Alert.alert('Error', error.message)
-                return
-              }
-
-              setHousehold(null)
-              invalidateDashboardContextCache()
-            } finally {
-              setSaving(false)
-            }
-          },
+          onPress: () => { void executeLeaveRpc() },
         },
       ]
     )
@@ -326,6 +359,49 @@ export default function HouseholdScreen() {
     if (household.adminUserId !== currentUserId) return
     if (nextAdminId === currentUserId) return
 
+    const executeTransfer = async () => {
+      setTransferringAdminId(nextAdminId)
+      try {
+        const { error } = await supabase
+          .from('households')
+          .update({ admin_user_id: nextAdminId })
+          .eq('id', household.id)
+
+        if (error) {
+          if (Platform.OS === 'web') {
+            ;(globalThis as any).alert?.(error.message)
+          } else {
+            Alert.alert('Error', error.message)
+          }
+          return
+        }
+
+        setHousehold(prev => prev ? {
+          ...prev,
+          adminUserId: nextAdminId,
+          adminName: nextAdminName,
+        } : prev)
+
+        invalidateDashboardContextCache()
+
+        const successMessage = `Ahora ${nextAdminName} es el jefe de hogar.`
+        if (Platform.OS === 'web') {
+          ;(globalThis as any).alert?.(successMessage)
+        } else {
+          Alert.alert('Listo', successMessage)
+        }
+      } finally {
+        setTransferringAdminId(null)
+      }
+    }
+
+    if (Platform.OS === 'web') {
+      const confirmed = (globalThis as any).confirm?.(`¿Quieres transferir el hogar a ${nextAdminName}?`) ?? false
+      if (!confirmed) return
+      await executeTransfer()
+      return
+    }
+
     Alert.alert(
       'Transferir jefatura',
       `¿Quieres transferir el hogar a ${nextAdminName}?`,
@@ -333,31 +409,7 @@ export default function HouseholdScreen() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Transferir',
-          onPress: async () => {
-            setTransferringAdminId(nextAdminId)
-            try {
-              const { error } = await supabase
-                .from('households')
-                .update({ admin_user_id: nextAdminId })
-                .eq('id', household.id)
-
-              if (error) {
-                Alert.alert('Error', error.message)
-                return
-              }
-
-              setHousehold(prev => prev ? {
-                ...prev,
-                adminUserId: nextAdminId,
-                adminName: nextAdminName,
-              } : prev)
-
-              invalidateDashboardContextCache()
-              Alert.alert('Listo', `Ahora ${nextAdminName} es el jefe de hogar.`)
-            } finally {
-              setTransferringAdminId(null)
-            }
-          },
+          onPress: () => { void executeTransfer() },
         },
       ]
     )
@@ -388,6 +440,11 @@ export default function HouseholdScreen() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleCopyInviteCode(code: string) {
+    await Clipboard.setStringAsync(code)
+    Alert.alert('Código copiado', 'El código de invitación se copió al portapapeles.')
   }
 
   async function toggleTemplate(template: TaskTemplate) {
@@ -567,6 +624,7 @@ export default function HouseholdScreen() {
   const isAdmin = household?.adminUserId === currentUserId
   const isProPlan = plan !== 'free'
   const transferCandidates = household?.members.filter(member => member.id !== currentUserId) ?? []
+  const isOnlyMember = Boolean(isAdmin && household && household.members.length === 1)
 
   if (loading) {
     return (
@@ -649,7 +707,10 @@ export default function HouseholdScreen() {
                   {isAdmin && (
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Código de invitación</Text>
-                      <Text style={styles.inviteCode}>{household.inviteCode}</Text>
+                      <Pressable onPress={() => handleCopyInviteCode(household.inviteCode)}>
+                        <Text style={styles.inviteCode}>{household.inviteCode}</Text>
+                        <Text style={styles.inviteCodeHint}>Tocar para copiar</Text>
+                      </Pressable>
                     </View>
                   )}
                 </>
@@ -686,18 +747,20 @@ export default function HouseholdScreen() {
                   : 'Revisa las tareas del hogar en la pantalla de configuración.'}
               </Text>
 
-              <Pressable
-                style={styles.primaryButton}
-                onPress={() => router.push('/(app)/household/configure-tasks')}
-              >
-                <Text style={styles.primaryButtonText}>{isAdmin ? 'Abrir configuración de tareas' : 'Ver tareas del hogar'}</Text>
-              </Pressable>
+              {isAdmin && (
+                <Pressable
+                  style={styles.primaryButton}
+                  onPress={() => router.push('/(app)/household/configure-tasks')}
+                >
+                  <Text style={styles.primaryButtonText}>Abrir configuración de tareas</Text>
+                </Pressable>
+              )}
             </View>
             </Reveal>
 
             {/* Leave */}
             <Reveal delay={130}>
-            {isAdmin && (
+            {isAdmin && !isOnlyMember && (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Transferir jefatura</Text>
                 {transferCandidates.length === 0 ? (
@@ -724,14 +787,15 @@ export default function HouseholdScreen() {
               </View>
             )}
 
-            {!isAdmin && (
-              <Pressable
-                style={[styles.dangerButton, saving && styles.buttonDisabled]}
-                onPress={handleLeave}
-                disabled={saving}
-              >
-                <Text style={styles.dangerButtonText}>Salir del hogar</Text>
-              </Pressable>
+            <Pressable
+              style={[styles.dangerButton, saving && styles.buttonDisabled]}
+              onPress={handleLeave}
+              disabled={saving}
+            >
+              <Text style={styles.dangerButtonText}>{isOnlyMember ? 'Abandonar y eliminar hogar' : 'Salir del hogar'}</Text>
+            </Pressable>
+            {isAdmin && !isOnlyMember && (
+              <Text style={styles.leaveHintText}>Primero transfiere la jefatura para poder salir del hogar.</Text>
             )}
             </Reveal>
           </>
@@ -815,7 +879,7 @@ const styles = StyleSheet.create({
     width: 230,
     height: 230,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#5EEAD4',
+    backgroundColor: '#F8CFA9',
     opacity: 0.08,
   },
   bgShapeBottom: {
@@ -825,14 +889,14 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#CCFBF1',
+    backgroundColor: '#F5DECA',
     opacity: 0.06,
   },
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#4A2F1E',
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: '#164E63',
+    borderColor: '#8A5A3B',
     padding: Spacing.lg,
     gap: Spacing.xs,
     ...ShadowPresets.soft,
@@ -843,19 +907,19 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   eyebrow: {
-    color: '#5EEAD4',
+    color: '#F5D4B3',
     textTransform: 'uppercase',
     fontWeight: '700',
     letterSpacing: 0.8,
     fontSize: 12,
   },
   title: {
-    color: '#F8FAFC',
+    color: '#FFF7EF',
     fontSize: 28,
     fontWeight: '800',
   },
   subtitle: {
-    color: '#CBD5E1',
+    color: '#F1D7BF',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -907,6 +971,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
   },
+  inviteCodeHint: {
+    color: Colors.text.secondary,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
+    marginTop: 2,
+  },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -917,12 +988,12 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#C7D2FE',
+    backgroundColor: '#E5C8A7',
     justifyContent: 'center',
     alignItems: 'center',
   },
   memberAvatarAdmin: {
-    backgroundColor: '#1E3A8A',
+    backgroundColor: '#8F5B3E',
   },
   memberAvatarText: {
     color: Colors.surface,
@@ -952,14 +1023,14 @@ const styles = StyleSheet.create({
     width: '23%',
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#DBE3F0',
-    backgroundColor: '#F8FAFF',
+    borderColor: '#E7D6C4',
+    backgroundColor: '#FFFAF5',
     padding: 6,
     gap: 4,
   },
   templateCardSelected: {
-    borderColor: '#1D4ED8',
-    backgroundColor: '#EEF4FF',
+    borderColor: '#C57B2A',
+    backgroundColor: '#FCEEDA',
   },
   templateCardDisabled: {
     opacity: 0.85,
@@ -986,7 +1057,7 @@ const styles = StyleSheet.create({
     minHeight: 26,
   },
   templateMeta: {
-    color: '#475569',
+    color: '#7A6758',
     fontSize: 10,
     fontWeight: '600',
   },
@@ -994,18 +1065,18 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#CCFBF1',
-    backgroundColor: '#ECFDF5',
+    borderColor: '#E8D5B6',
+    backgroundColor: '#FDF5E8',
     padding: Spacing.sm,
     gap: 4,
   },
   planHintTitle: {
-    color: '#0F766E',
+    color: '#8A4C1B',
     fontSize: 13,
     fontWeight: '700',
   },
   planHintText: {
-    color: '#115E59',
+    color: '#7A6758',
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1031,8 +1102,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   frequencyChipActive: {
-    borderColor: '#1D4ED8',
-    backgroundColor: '#DBEAFE',
+    borderColor: '#C57B2A',
+    backgroundColor: '#FCEEDA',
   },
   frequencyChipText: {
     color: '#334155',
@@ -1040,7 +1111,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   frequencyChipTextActive: {
-    color: '#1E3A8A',
+    color: '#8A4C1B',
   },
   customTaskList: {
     marginTop: Spacing.sm,
@@ -1060,9 +1131,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E7D6C4',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFAF5',
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
   },
@@ -1149,20 +1220,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  leaveHintText: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+  },
   transferList: {
     gap: Spacing.xs,
     marginTop: Spacing.xs,
   },
   transferButton: {
     borderWidth: 1,
-    borderColor: '#93C5FD',
+    borderColor: '#D9A576',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F9E8D6',
     paddingVertical: Spacing.sm,
     alignItems: 'center',
   },
   transferButtonText: {
-    color: '#1E3A8A',
+    color: '#8A4C1B',
     fontSize: 14,
     fontWeight: '700',
   },
