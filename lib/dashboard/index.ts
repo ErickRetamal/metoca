@@ -57,6 +57,12 @@ const CONTEXT_CACHE_TTL_MS = 15000
 let contextCache: { value: DashboardContext; expiresAt: number } | null = null
 let contextPromise: Promise<DashboardContext> | null = null
 
+function getPlanPriority(plan: SubscriptionPlan): number {
+  if (plan === 'familia') return 3
+  if (plan === 'hogar') return 2
+  return 1
+}
+
 function monthOffsetToKey(offset: number): string {
   const date = new Date(getNow())
   date.setMonth(date.getMonth() + offset)
@@ -167,21 +173,14 @@ async function resolveContext(): Promise<DashboardContext> {
 
       const householdId = membership.household_id
 
-      const [{ data: household }, { data: subscription }, { data: memberRows }] = await Promise.all([
+      const [{ data: household }, { data: memberRows }, { data: effectivePlan }] = await Promise.all([
         supabase.from('households').select('name').eq('id', householdId).maybeSingle(),
-        supabase
-          .from('subscriptions')
-          .select('plan')
-          .eq('household_id', householdId)
-          .eq('status', 'active')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
         supabase
           .from('household_members')
           .select('user_id, users(name, email)')
           .eq('household_id', householdId)
           .eq('status', 'active'),
+        supabase.rpc('get_effective_household_plan', { p_household_id: householdId }),
       ])
 
       const members: DashboardMember[] =
@@ -198,7 +197,7 @@ async function resolveContext(): Promise<DashboardContext> {
         currentUserName: resolvedCurrentUserName,
         householdId,
         householdName: household?.name ?? CURRENT_HOUSEHOLD_NAME,
-        plan: (subscription?.plan ?? CURRENT_PLAN) as SubscriptionPlan,
+        plan: (effectivePlan ?? CURRENT_PLAN) as SubscriptionPlan,
         members,
       }
     } catch {
@@ -271,6 +270,37 @@ export async function getCurrentPlanAsync(): Promise<SubscriptionPlan> {
   return context.plan
 }
 
+export async function getCurrentOwnedPlanAsync(): Promise<SubscriptionPlan> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return CURRENT_PLAN
+  }
+
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('plan, expires_at')
+    .eq('owner_user_id', user.id)
+    .eq('status', 'active')
+
+  if (error || !data?.length) {
+    return CURRENT_PLAN
+  }
+
+  const now = getNow().getTime()
+
+  const bestPlan = data
+    .filter(row => !row.expires_at || new Date(row.expires_at).getTime() > now)
+    .reduce<SubscriptionPlan>((currentBest, row) => {
+      const nextPlan = (row.plan ?? CURRENT_PLAN) as SubscriptionPlan
+      return getPlanPriority(nextPlan) > getPlanPriority(currentBest) ? nextPlan : currentBest
+    }, CURRENT_PLAN)
+
+  return bestPlan
+}
+
 export async function getCurrentUserAsync(): Promise<DashboardMember> {
   const context = await resolveContext()
   return { id: context.currentUserId, name: context.currentUserName }
@@ -291,9 +321,11 @@ export async function getMyTodayTasksAsync(): Promise<DashboardTaskExecution[]> 
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .eq('assigned_to', context.currentUserId)
     .eq('scheduled_date', today)
+    .eq('tasks.is_active', true)
+    .is('tasks.deleted_at', null)
     .order('scheduled_time', { ascending: true })
 
   if (error || !data) {
@@ -315,9 +347,11 @@ export async function getMyTomorrowTasksAsync(): Promise<DashboardTaskExecution[
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .eq('assigned_to', context.currentUserId)
     .eq('scheduled_date', tomorrowKey)
+    .eq('tasks.is_active', true)
+    .is('tasks.deleted_at', null)
     .order('scheduled_time', { ascending: true })
 
   if (error || !data) {
@@ -354,10 +388,12 @@ export async function getMonthTasksAsync(monthOffset: number, userId?: string): 
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .eq('assigned_to', targetUserId)
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
+    .eq('tasks.is_active', true)
+    .is('tasks.deleted_at', null)
     .order('scheduled_date', { ascending: true })
 
   if (error || !data) {
@@ -382,9 +418,11 @@ export async function getHouseholdTodaySummaryAsync() {
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .in('assigned_to', memberIds)
     .eq('scheduled_date', today)
+    .eq('tasks.is_active', true)
+    .is('tasks.deleted_at', null)
 
   if (error || !data) {
     return getHouseholdTodaySummary()
@@ -422,10 +460,12 @@ export async function getHouseholdMonthSummaryAsync(monthOffset: number) {
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .in('assigned_to', memberIds)
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
+    .eq('tasks.is_active', true)
+    .is('tasks.deleted_at', null)
 
   if (error || !data) {
     return getHouseholdMonthSummary(monthOffset)
@@ -474,10 +514,12 @@ export async function getHouseholdMonthTasksAsync(monthOffset: number): Promise<
 
   const { data, error } = await supabase
     .from('task_executions')
-    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name, frequency)')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .in('assigned_to', memberIds)
     .gte('scheduled_date', start)
     .lte('scheduled_date', end)
+    .eq('tasks.is_active', true)
+    .is('tasks.deleted_at', null)
     .order('scheduled_date', { ascending: true })
     .order('scheduled_time', { ascending: true })
 

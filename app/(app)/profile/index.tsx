@@ -5,10 +5,11 @@ import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
-import { CURRENT_PLAN, getCurrentPlanAsync } from '../../../lib/dashboard'
+import { CURRENT_PLAN, getCurrentOwnedPlanAsync, getCurrentPlanAsync } from '../../../lib/dashboard'
 import { goToPaywall } from '../../../lib/navigation'
 import { SubscriptionPlan } from '../../../types'
 import { Reveal } from '../../../components/ui/reveal'
+import { Skeleton } from '../../../components/ui/skeleton'
 
 type GenderValue = 'masculino' | 'femenino' | 'otro' | 'prefiero_no_decir'
 
@@ -16,9 +17,14 @@ const AVATAR_COLORS = ['#1E3A8A', '#7C3AED', '#0F766E', '#BE123C', '#0369A1'] as
 type AvatarColor = typeof AVATAR_COLORS[number]
 
 function getPlanLabel(plan: SubscriptionPlan): string {
-  if (plan === 'family') return 'Familia'
-  if (plan === 'household') return 'Hogar'
+  if (plan === 'familia') return 'Familia'
+  if (plan === 'hogar') return 'Hogar'
   return 'Gratis'
+}
+
+function getHouseholdLabel(name: string, plan: SubscriptionPlan): string {
+  const resolvedName = name || 'Vinculado'
+  return `${resolvedName} (${getPlanLabel(plan)})`
 }
 
 function getFullName(firstName: string | null, lastName: string | null, fallbackEmail?: string): string {
@@ -73,6 +79,7 @@ export default function ProfileScreen() {
   const [draftAvatarInitial, setDraftAvatarInitial] = useState('U')
   const [draftAvatarColor, setDraftAvatarColor] = useState<AvatarColor>(AVATAR_COLORS[0])
   const [plan, setPlan] = useState<SubscriptionPlan>(CURRENT_PLAN)
+  const [householdPlan, setHouseholdPlan] = useState<SubscriptionPlan>(CURRENT_PLAN)
   const [isInHousehold, setIsInHousehold] = useState(false)
   const [householdName, setHouseholdName] = useState('')
   const { onMenuPress } = useMenuContext()
@@ -81,8 +88,9 @@ export default function ProfileScreen() {
     let mounted = true
 
     async function loadProfile() {
-      const [{ data: userData }, currentPlan] = await Promise.all([
+      const [{ data: userData }, currentOwnedPlan, currentHouseholdPlan] = await Promise.all([
         supabase.auth.getUser(),
+        getCurrentOwnedPlanAsync(),
         getCurrentPlanAsync(),
       ])
 
@@ -159,7 +167,8 @@ export default function ProfileScreen() {
       }
 
       setEmail(userEmail)
-      setPlan(currentPlan)
+      setPlan(currentOwnedPlan)
+      setHouseholdPlan(currentHouseholdPlan)
       setLoading(false)
     }
 
@@ -286,8 +295,26 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator color={Colors.primary} />
+      <View style={styles.container}>
+        <View style={styles.bgShapeTop} />
+        <View style={styles.bgShapeBottom} />
+
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.heroCard}>
+            <Skeleton width={120} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={74} height={74} borderRadius={BorderRadius.full} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="60%" height={26} style={{ marginBottom: Spacing.xs }} />
+            <Skeleton width="75%" height={16} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width={120} height={32} borderRadius={BorderRadius.full} />
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Skeleton width="45%" height={22} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={16} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="88%" height={16} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="92%" height={16} />
+          </View>
+        </ScrollView>
       </View>
     )
   }
@@ -440,13 +467,15 @@ export default function ProfileScreen() {
           </View>
 
           <Pressable style={styles.infoRow} onPress={() => goToPaywall('profile-subscription-row')}>
-            <Text style={styles.infoLabel}>Suscripcion</Text>
+            <Text style={styles.infoLabel}>Mi suscripcion</Text>
             <Text style={styles.infoValue}>{getPlanLabel(plan)}</Text>
           </Pressable>
 
           <Pressable style={styles.infoRow} onPress={() => router.push('/(app)/household')}>
             <Text style={styles.infoLabel}>Mi hogar</Text>
-            <Text style={styles.infoValue}>{isInHousehold ? (householdName || 'Vinculado') : 'No vinculado'}</Text>
+            <Text style={styles.infoValue}>
+              {isInHousehold ? getHouseholdLabel(householdName, householdPlan) : 'No vinculado'}
+            </Text>
           </Pressable>
 
           {isEditing && (

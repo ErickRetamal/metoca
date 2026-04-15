@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { getMonthKey, getMonthTasksAsync } from '../../../lib/dashboard'
 
 function formatMonthLabel(monthKey: string): string {
@@ -56,6 +57,7 @@ export default function TaskMonthDetailScreen() {
     status: 'pending' | 'completed' | 'missed'
     frequency: 'daily' | 'weekly' | 'monthly'
   }>>([])
+  const [loading, setLoading] = useState(true)
 
   const monthLabel = useMemo(() => formatMonthLabel(getMonthKey(monthOffset)), [monthOffset])
 
@@ -63,16 +65,21 @@ export default function TaskMonthDetailScreen() {
     let mounted = true
 
     async function loadDetail() {
-      const rows = await getMonthTasksAsync(monthOffset, memberId)
-      const filtered = rows
-        .filter(row => row.taskName === taskName && row.frequency === frequency)
-        .sort((a, b) => {
-          const byDate = a.scheduledDate.localeCompare(b.scheduledDate)
-          if (byDate !== 0) return byDate
-          return a.scheduledTime.localeCompare(b.scheduledTime)
-        })
+      if (mounted) setLoading(true)
+      try {
+        const rows = await getMonthTasksAsync(monthOffset, memberId)
+        const filtered = rows
+          .filter(row => row.taskName === taskName && row.frequency === frequency)
+          .sort((a, b) => {
+            const byDate = a.scheduledDate.localeCompare(b.scheduledDate)
+            if (byDate !== 0) return byDate
+            return a.scheduledTime.localeCompare(b.scheduledTime)
+          })
 
-      if (mounted) setExecutions(filtered)
+        if (mounted) setExecutions(filtered)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
     void loadDetail()
@@ -85,6 +92,33 @@ export default function TaskMonthDetailScreen() {
   const completed = executions.filter(item => item.status === 'completed').length
   const missed = executions.filter(item => item.status === 'missed').length
   const pending = executions.filter(item => item.status === 'pending').length
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={120} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={230} height={30} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={260} height={14} style={{ marginBottom: Spacing.md }} />
+            <View style={styles.kpiRow}>
+              <Skeleton width="24%" height={56} />
+              <Skeleton width="24%" height={56} />
+              <Skeleton width="24%" height={56} />
+              <Skeleton width="24%" height={56} />
+            </View>
+          </View>
+
+          <View style={styles.listCard}>
+            <Skeleton width={190} height={20} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={48} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={48} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={48} />
+          </View>
+        </ScrollView>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.container}>

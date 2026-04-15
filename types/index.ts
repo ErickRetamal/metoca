@@ -5,7 +5,11 @@ export type Platform = 'android' | 'ios'
 
 export type HouseholdMemberStatus = 'invited' | 'active' | 'removed'
 
+export type MemberProfile = 'adulto' | 'joven'
+
 export type TaskFrequency = 'daily' | 'weekly' | 'monthly'
+
+export type TaskAudience = 'todos' | 'solo_adultos' | 'solo_jovenes'
 
 export type TaskExecutionStatus = 'pending' | 'completed' | 'missed'
 
@@ -60,6 +64,7 @@ export interface HouseholdMember {
   household_id: string
   user_id: string
   status: HouseholdMemberStatus
+  profile: MemberProfile
   joined_at: string | null
   created_at: string
 }
@@ -69,10 +74,12 @@ export interface Task {
   household_id: string
   name: string
   frequency: TaskFrequency
+  audience: TaskAudience
   notification_time: string // HH:MM
   day_of_week: number | null // 0=Lun … 6=Dom
   day_of_month: number | null // 1–28
   is_active: boolean
+  is_custom: boolean
   created_by: string
   created_at: string
   updated_at: string
@@ -104,6 +111,7 @@ export interface TaskExecution {
 export interface Subscription {
   id: string
   household_id: string
+  owner_user_id: string | null
   plan: SubscriptionPlan
   max_members: number
   status: SubscriptionStatus

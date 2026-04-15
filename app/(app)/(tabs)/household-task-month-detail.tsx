@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { getHouseholdMonthTasksAsync, getMonthKey } from '../../../lib/dashboard'
 import { TaskExecutionStatus, TaskFrequency } from '../../../types'
 
@@ -57,33 +58,39 @@ export default function HouseholdTaskMonthDetailScreen() {
     params.frequency === 'weekly' || params.frequency === 'monthly' ? params.frequency : 'daily'
 
   const [executions, setExecutions] = useState<HouseholdTaskDetailRow[]>([])
+  const [loading, setLoading] = useState(true)
   const monthLabel = useMemo(() => formatMonthLabel(getMonthKey(monthOffset)), [monthOffset])
 
   useEffect(() => {
     let mounted = true
 
     async function loadDetail() {
-      const rows = await getHouseholdMonthTasksAsync(monthOffset)
-      const filtered = rows
-        .filter(row => row.taskName === taskName && row.frequency === frequency)
-        .sort((a, b) => {
-          const byDate = a.scheduledDate.localeCompare(b.scheduledDate)
-          if (byDate !== 0) return byDate
-          return a.scheduledTime.localeCompare(b.scheduledTime)
-        })
+      if (mounted) setLoading(true)
+      try {
+        const rows = await getHouseholdMonthTasksAsync(monthOffset)
+        const filtered = rows
+          .filter(row => row.taskName === taskName && row.frequency === frequency)
+          .sort((a, b) => {
+            const byDate = a.scheduledDate.localeCompare(b.scheduledDate)
+            if (byDate !== 0) return byDate
+            return a.scheduledTime.localeCompare(b.scheduledTime)
+          })
 
-      if (!mounted) return
-      setExecutions(
-        filtered.map(row => ({
-          id: row.id,
-          assignedToName: row.assignedToName,
-          scheduledDate: row.scheduledDate,
-          scheduledTime: row.scheduledTime,
-          status: row.status,
-          taskName: row.taskName,
-          frequency: row.frequency,
-        }))
-      )
+        if (!mounted) return
+        setExecutions(
+          filtered.map(row => ({
+            id: row.id,
+            assignedToName: row.assignedToName,
+            scheduledDate: row.scheduledDate,
+            scheduledTime: row.scheduledTime,
+            status: row.status,
+            taskName: row.taskName,
+            frequency: row.frequency,
+          }))
+        )
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
     void loadDetail()
@@ -96,6 +103,33 @@ export default function HouseholdTaskMonthDetailScreen() {
   const completed = executions.filter(item => item.status === 'completed').length
   const missed = executions.filter(item => item.status === 'missed').length
   const pending = executions.filter(item => item.status === 'pending').length
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={120} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={230} height={30} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={260} height={14} style={{ marginBottom: Spacing.md }} />
+            <View style={styles.kpiRow}>
+              <Skeleton width="24%" height={56} />
+              <Skeleton width="24%" height={56} />
+              <Skeleton width="24%" height={56} />
+              <Skeleton width="24%" height={56} />
+            </View>
+          </View>
+
+          <View style={styles.listCard}>
+            <Skeleton width={190} height={20} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={48} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={48} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={48} />
+          </View>
+        </ScrollView>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.container}>
@@ -161,28 +195,28 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxl,
   },
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#2E1A11',
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: '#1E3A8A',
+    borderColor: '#8F5B3E',
     padding: Spacing.lg,
     gap: Spacing.xs,
     ...ShadowPresets.card,
   },
   eyebrow: {
-    color: '#93C5FD',
+    color: '#F4DCC3',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   title: {
-    color: '#F8FAFC',
+    color: '#FFF8F1',
     fontSize: 24,
     fontWeight: '800',
   },
   subtitle: {
-    color: '#CBD5E1',
+    color: '#E8D9C8',
     fontSize: 13,
     textTransform: 'capitalize',
   },
@@ -194,20 +228,20 @@ const styles = StyleSheet.create({
   kpiItem: {
     flex: 1,
     borderRadius: BorderRadius.md,
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    backgroundColor: 'rgba(244, 220, 195, 0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(147, 197, 253, 0.26)',
+    borderColor: 'rgba(244, 220, 195, 0.24)',
     paddingVertical: Spacing.sm,
     alignItems: 'center',
     gap: 2,
   },
   kpiValue: {
-    color: '#F8FAFC',
+    color: '#FFF8F1',
     fontSize: 16,
     fontWeight: '800',
   },
   kpiLabel: {
-    color: '#BFDBFE',
+    color: '#F4DCC3',
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -239,7 +273,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.sm,
     borderWidth: 1,
-    borderColor: '#E8EEF8',
+    borderColor: '#EADFCC',
     borderRadius: BorderRadius.md,
     backgroundColor: '#FFFFFF',
   },
@@ -273,14 +307,14 @@ const styles = StyleSheet.create({
   },
   backButton: {
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#E6C6A1',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: '#FFF1E4',
     alignItems: 'center',
     paddingVertical: Spacing.sm,
   },
   backButtonText: {
-    color: '#1D4ED8',
+    color: '#B45309',
     fontSize: 14,
     fontWeight: '700',
   },

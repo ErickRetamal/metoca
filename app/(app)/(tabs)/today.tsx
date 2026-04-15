@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View 
 import { router } from 'expo-router'
 import { Colors, Spacing, BorderRadius, ShadowPresets } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
@@ -49,6 +50,7 @@ function getStatusLabel(status: 'pending' | 'completed' | 'missed'): string {
 export default function TodayScreen() {
   const [tasks, setTasks] = useState(getMyTodayTasks())
   const [tomorrowTasks, setTomorrowTasks] = useState<DashboardTaskExecution[]>([])
+  const [loading, setLoading] = useState(true)
   const [currentPlan, setCurrentPlan] = useState(CURRENT_PLAN)
   const [currentUserName, setCurrentUserName] = useState(getCurrentUser().name)
   const [taskActionFeedback, setTaskActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -61,18 +63,22 @@ export default function TodayScreen() {
     let mounted = true
 
     async function loadToday() {
-      const [plan, user, todayTasks, tomorrowTasksData] = await Promise.all([
-        getCurrentPlanAsync(),
-        getCurrentUserAsync(),
-        getMyTodayTasksAsync(),
-        getMyTomorrowTasksAsync(),
-      ])
+      try {
+        const [plan, user, todayTasks, tomorrowTasksData] = await Promise.all([
+          getCurrentPlanAsync(),
+          getCurrentUserAsync(),
+          getMyTodayTasksAsync(),
+          getMyTomorrowTasksAsync(),
+        ])
 
-      if (!mounted) return
-      setCurrentPlan(plan)
-      setCurrentUserName(user.name)
-      setTasks(todayTasks)
-      setTomorrowTasks(tomorrowTasksData)
+        if (!mounted) return
+        setCurrentPlan(plan)
+        setCurrentUserName(user.name)
+        setTasks(todayTasks)
+        setTomorrowTasks(tomorrowTasksData)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
     loadToday()
@@ -95,6 +101,43 @@ export default function TodayScreen() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!taskActionFeedback) return
+
+    const timer = setTimeout(() => {
+      setTaskActionFeedback(null)
+    }, 3500)
+
+    return () => clearTimeout(timer)
+  }, [taskActionFeedback])
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.bgShapeTop} />
+        <View style={styles.bgShapeBottom} />
+
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={160} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="72%" height={36} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={150} height={14} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="55%" height={30} style={{ marginBottom: Spacing.xs }} />
+            <Skeleton width={120} height={16} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={8} borderRadius={BorderRadius.full} />
+          </View>
+
+          <View style={styles.listCard}>
+            <Skeleton width={170} height={28} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={74} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={74} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={74} />
+          </View>
+        </ScrollView>
+      </View>
+    )
+  }
+
   const completedCount = tasks.filter(task => task.status === 'completed').length
   const progress = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100)
 
@@ -110,7 +153,7 @@ export default function TodayScreen() {
 
       const updatedTask = next.find(task => task.id === taskId)
       if (updatedTask?.status === 'completed') {
-        setTaskActionFeedback({ type: 'success', message: `OK: "${taskName}" marcada como completada.` })
+        setTaskActionFeedback({ type: 'success', message: `"${taskName}" marcada como completada.` })
       } else {
         setTaskActionFeedback({ type: 'error', message: 'No se pudo marcar la tarea. Reintenta.' })
       }
@@ -137,7 +180,9 @@ export default function TodayScreen() {
             <Text style={styles.greeting}>Hola, {currentUserName}</Text>
             <View style={styles.headerActions}>
               <Pressable style={styles.planPill} onPress={() => goToPaywall('today-plan-pill')}>
-                <Text style={styles.planPillText}>{currentPlan === 'free' ? 'Plan Free' : 'Plan Premium'}</Text>
+                <Text style={styles.planPillText}>
+                  {currentPlan === 'hogar' ? 'Plan Hogar' : currentPlan === 'familia' ? 'Plan Familia' : 'Plan Gratis'}
+                </Text>
               </Pressable>
             </View>
           </View>

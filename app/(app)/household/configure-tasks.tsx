@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { router } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
@@ -11,6 +12,7 @@ import { goToPaywall } from '../../../lib/navigation'
 
 type AppPlan = 'free' | 'hogar' | 'familia'
 type TaskFrequency = 'daily' | 'weekly' | 'monthly'
+type TaskAudience = 'todos' | 'solo_adultos' | 'solo_jovenes'
 
 interface WeeklySlotDraft {
   id: string
@@ -39,23 +41,29 @@ const WEEK_DAY_OPTIONS = [
   { value: 6, label: 'Sab' },
 ]
 
+const TASK_AUDIENCE_OPTIONS: Array<{ value: TaskAudience; label: string }> = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'solo_adultos', label: 'Solo adultos' },
+  { value: 'solo_jovenes', label: 'Solo jóvenes' },
+]
+
 const TASK_TEMPLATES: TaskTemplate[] = [
-  { key: 'dishes', name: 'Lavar platos', code: 'LP', color: '#DBEAFE', frequency: 'daily', notificationTime: '20:00:00' },
-  { key: 'trash', name: 'Sacar basura', code: 'SB', color: '#E0E7FF', frequency: 'daily', notificationTime: '21:00:00' },
-  { key: 'sweep', name: 'Barrer piso', code: 'BP', color: '#FCE7F3', frequency: 'daily', notificationTime: '19:00:00' },
-  { key: 'bathroom', name: 'Limpiar bano', code: 'LB', color: '#ECFEFF', frequency: 'weekly', notificationTime: '10:00:00', dayOfWeek: 6 },
-  { key: 'laundry', name: 'Lavar ropa', code: 'LR', color: '#F0FDF4', frequency: 'weekly', notificationTime: '11:00:00', dayOfWeek: 3 },
-  { key: 'kitchen', name: 'Orden cocina', code: 'OC', color: '#FFF7ED', frequency: 'daily', notificationTime: '18:30:00' },
-  { key: 'beds', name: 'Hacer camas', code: 'HC', color: '#FEF3C7', frequency: 'daily', notificationTime: '08:00:00' },
-  { key: 'plants', name: 'Regar plantas', code: 'RP', color: '#DCFCE7', frequency: 'weekly', notificationTime: '09:00:00', dayOfWeek: 2 },
-  { key: 'fridge', name: 'Revisar refri', code: 'RR', color: '#FAE8FF', frequency: 'weekly', notificationTime: '20:30:00', dayOfWeek: 0 },
-  { key: 'dust', name: 'Quitar polvo', code: 'QP', color: '#EEF2FF', frequency: 'weekly', notificationTime: '12:00:00', dayOfWeek: 5 },
-  { key: 'windows', name: 'Limpiar vidrios', code: 'LV', color: '#E0F2FE', frequency: 'monthly', notificationTime: '10:30:00', dayOfMonth: 10 },
-  { key: 'pantry', name: 'Orden despensa', code: 'OD', color: '#FEF9C3', frequency: 'monthly', notificationTime: '17:00:00', dayOfMonth: 12 },
-  { key: 'garage', name: 'Orden garage', code: 'OG', color: '#FFE4E6', frequency: 'monthly', notificationTime: '16:00:00', dayOfMonth: 15 },
-  { key: 'shopping', name: 'Lista compras', code: 'LC', color: '#F5F3FF', frequency: 'weekly', notificationTime: '18:00:00', dayOfWeek: 4 },
-  { key: 'bathsupplies', name: 'Reponer bano', code: 'RB', color: '#ECFCCB', frequency: 'weekly', notificationTime: '13:00:00', dayOfWeek: 1 },
-  { key: 'pet', name: 'Zona mascota', code: 'ZM', color: '#FDF2F8', frequency: 'daily', notificationTime: '19:30:00' },
+  { key: 'dishes', name: 'Lavar platos', code: 'LP', color: '#FCE8D9', frequency: 'daily', notificationTime: '20:00:00' },
+  { key: 'trash', name: 'Sacar basura', code: 'SB', color: '#F7E4DB', frequency: 'daily', notificationTime: '21:00:00' },
+  { key: 'sweep', name: 'Barrer piso', code: 'BP', color: '#FBE7DE', frequency: 'daily', notificationTime: '19:00:00' },
+  { key: 'bathroom', name: 'Limpiar bano', code: 'LB', color: '#F6EBDD', frequency: 'weekly', notificationTime: '10:00:00', dayOfWeek: 6 },
+  { key: 'laundry', name: 'Lavar ropa', code: 'LR', color: '#E8F0E6', frequency: 'weekly', notificationTime: '11:00:00', dayOfWeek: 3 },
+  { key: 'kitchen', name: 'Orden cocina', code: 'OC', color: '#FFF1E4', frequency: 'daily', notificationTime: '18:30:00' },
+  { key: 'beds', name: 'Hacer camas', code: 'HC', color: '#F9EED0', frequency: 'daily', notificationTime: '08:00:00' },
+  { key: 'plants', name: 'Regar plantas', code: 'RP', color: '#EAF3E8', frequency: 'weekly', notificationTime: '09:00:00', dayOfWeek: 2 },
+  { key: 'fridge', name: 'Revisar refri', code: 'RR', color: '#F6EDE8', frequency: 'weekly', notificationTime: '20:30:00', dayOfWeek: 0 },
+  { key: 'dust', name: 'Quitar polvo', code: 'QP', color: '#F3ECE6', frequency: 'weekly', notificationTime: '12:00:00', dayOfWeek: 5 },
+  { key: 'windows', name: 'Limpiar vidrios', code: 'LV', color: '#EEE5D9', frequency: 'monthly', notificationTime: '10:30:00', dayOfMonth: 10 },
+  { key: 'pantry', name: 'Orden despensa', code: 'OD', color: '#F6ECD4', frequency: 'monthly', notificationTime: '17:00:00', dayOfMonth: 12 },
+  { key: 'garage', name: 'Orden garage', code: 'OG', color: '#F6DFD7', frequency: 'monthly', notificationTime: '16:00:00', dayOfMonth: 15 },
+  { key: 'shopping', name: 'Lista compras', code: 'LC', color: '#EFE8E1', frequency: 'weekly', notificationTime: '18:00:00', dayOfWeek: 4 },
+  { key: 'bathsupplies', name: 'Reponer bano', code: 'RB', color: '#EAF1DE', frequency: 'weekly', notificationTime: '13:00:00', dayOfWeek: 1 },
+  { key: 'pet', name: 'Zona mascota', code: 'ZM', color: '#F8E7E3', frequency: 'daily', notificationTime: '19:30:00' },
 ]
 
 function getCustomTaskLimit(plan: AppPlan): number {
@@ -117,10 +125,12 @@ export default function ConfigureHouseholdTasksScreen() {
   const [isAdmin, setIsAdmin] = useState(false)
 
   const [selectedTaskNames, setSelectedTaskNames] = useState<string[]>([])
-  const [customTasks, setCustomTasks] = useState<Array<{ id: string; name: string; frequency: TaskFrequency }>>([])
+  const [customTasks, setCustomTasks] = useState<Array<{ id: string; name: string; frequency: TaskFrequency; audience: TaskAudience }>>([])
+  const [activeTasks, setActiveTasks] = useState<Array<{ id: string; name: string; frequency: TaskFrequency; audience: TaskAudience; isCustom: boolean }>>([])
 
   const [templateToActivate, setTemplateToActivate] = useState<TaskTemplate | null>(null)
   const [templateFrequency, setTemplateFrequency] = useState<TaskFrequency>('daily')
+  const [templateAudience, setTemplateAudience] = useState<TaskAudience>('todos')
   const [templateTimeDraft, setTemplateTimeDraft] = useState('20:00')
   const [templateDaysOfWeek, setTemplateDaysOfWeek] = useState<number[]>([1])
   const [templateDayOfMonth, setTemplateDayOfMonth] = useState(1)
@@ -128,6 +138,7 @@ export default function ConfigureHouseholdTasksScreen() {
 
   const [customTaskNameDraft, setCustomTaskNameDraft] = useState('')
   const [customTaskFrequency, setCustomTaskFrequency] = useState<TaskFrequency>('weekly')
+  const [customTaskAudience, setCustomTaskAudience] = useState<TaskAudience>('todos')
   const [customTaskTimeDraft, setCustomTaskTimeDraft] = useState('20:00')
   const [customTaskDaysOfWeek, setCustomTaskDaysOfWeek] = useState<number[]>([1])
   const [customTaskDayOfMonth, setCustomTaskDayOfMonth] = useState(1)
@@ -186,7 +197,7 @@ export default function ConfigureHouseholdTasksScreen() {
             .maybeSingle(),
           supabase
             .from('tasks')
-            .select('id, name, frequency')
+            .select('id, name, frequency, audience')
             .eq('household_id', nextHouseholdId)
             .eq('is_active', true)
             .is('deleted_at', null),
@@ -202,12 +213,22 @@ export default function ConfigureHouseholdTasksScreen() {
             id: row.id,
             name: row.name,
             frequency: row.frequency as TaskFrequency,
+            audience: (row.audience ?? 'todos') as TaskAudience,
           }))
 
         const adminAccess = Boolean(householdRow?.admin_user_id && householdRow.admin_user_id === user.id)
 
+        const allActiveTasks = (taskRows ?? []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          frequency: row.frequency as TaskFrequency,
+          audience: (row.audience ?? 'todos') as TaskAudience,
+          isCustom: !templateNameSet.has(row.name),
+        }))
+
         setSelectedTaskNames(names)
         setCustomTasks(loadedCustom)
+        setActiveTasks(allActiveTasks)
         setIsAdmin(adminAccess)
 
         if (!adminAccess) {
@@ -316,6 +337,8 @@ export default function ConfigureHouseholdTasksScreen() {
             is_active: true,
             deleted_at: null,
             frequency: templateFrequency,
+            audience: isProPlan ? templateAudience : 'todos',
+            is_custom: false,
             notification_time: notificationTime,
             day_of_week: nextDayOfWeek,
             weekly_days: templateFrequency === 'weekly' ? nextWeeklyDays : null,
@@ -334,6 +357,10 @@ export default function ConfigureHouseholdTasksScreen() {
           templateFrequency,
           templateFrequency === 'weekly' || templateFrequency === 'daily' ? templateExtraWeeklySlots : []
         )
+        setActiveTasks(prev => [
+          ...prev.filter(t => t.name !== templateToActivate.name),
+          { id: taskId, name: templateToActivate.name, frequency: templateFrequency, audience: isProPlan ? templateAudience : 'todos', isCustom: false },
+        ])
       } else {
         const { data: inserted, error } = await supabase
           .from('tasks')
@@ -341,6 +368,8 @@ export default function ConfigureHouseholdTasksScreen() {
             household_id: householdId,
             name: templateToActivate.name,
             frequency: templateFrequency,
+            audience: isProPlan ? templateAudience : 'todos',
+            is_custom: false,
             notification_time: notificationTime,
             day_of_week: nextDayOfWeek,
             weekly_days: templateFrequency === 'weekly' ? nextWeeklyDays : null,
@@ -362,6 +391,10 @@ export default function ConfigureHouseholdTasksScreen() {
           templateFrequency,
           templateFrequency === 'weekly' || templateFrequency === 'daily' ? templateExtraWeeklySlots : []
         )
+        setActiveTasks(prev => [
+          ...prev.filter(t => t.name !== templateToActivate.name),
+          { id: inserted.id, name: templateToActivate.name, frequency: templateFrequency, audience: isProPlan ? templateAudience : 'todos', isCustom: false },
+        ])
       }
 
       setSelectedTaskNames(prev => [...prev, templateToActivate.name])
@@ -431,6 +464,8 @@ export default function ConfigureHouseholdTasksScreen() {
           household_id: householdId,
           name: taskName,
           frequency: customTaskFrequency,
+          audience: isProPlan ? customTaskAudience : 'todos',
+          is_custom: true,
           notification_time: notificationTime,
           day_of_week: nextDayOfWeek,
           weekly_days: customTaskFrequency === 'weekly' ? nextCustomWeeklyDays : null,
@@ -454,9 +489,11 @@ export default function ConfigureHouseholdTasksScreen() {
       )
 
       setSelectedTaskNames(prev => [...prev, taskName])
-      setCustomTasks(prev => [...prev, { id: inserted.id, name: taskName, frequency: customTaskFrequency }])
+      setCustomTasks(prev => [...prev, { id: inserted.id, name: taskName, frequency: customTaskFrequency, audience: isProPlan ? customTaskAudience : 'todos' }])
+      setActiveTasks(prev => [...prev, { id: inserted.id, name: taskName, frequency: customTaskFrequency, audience: isProPlan ? customTaskAudience : 'todos', isCustom: true }])
       setCustomTaskNameDraft('')
       setCustomTaskFrequency('weekly')
+      setCustomTaskAudience('todos')
       setCustomTaskTimeDraft('20:00')
       setCustomTaskDaysOfWeek([1])
       setCustomTaskDayOfMonth(1)
@@ -469,6 +506,18 @@ export default function ConfigureHouseholdTasksScreen() {
 
   async function handleRedistributeTasksNow() {
     if (!householdId || !isAdmin || redistributing) return
+
+    if (plan === 'free') {
+      Alert.alert(
+        'Plan Free',
+        'La redistribución manual con perfiles está disponible en Hogar o Familia. En Free se mantiene la distribución normal.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Ver planes', onPress: () => goToPaywall('configure-tasks-free-redistribute') },
+        ]
+      )
+      return
+    }
 
     setScreenFeedback(null)
 
@@ -509,10 +558,91 @@ export default function ConfigureHouseholdTasksScreen() {
     }
   }
 
+  async function handleDeactivateTask(taskId: string, taskName: string) {
+    if (!householdId || !isAdmin || saving) return
+
+    const performDeactivate = async () => {
+      setSaving(true)
+      try {
+        const { error } = await supabase
+          .from('tasks')
+          .update({ is_active: false, deleted_at: new Date().toISOString() })
+          .eq('id', taskId)
+          .eq('household_id', householdId)
+
+        if (error) {
+          setScreenFeedback({ type: 'error', message: error.message })
+          if (Platform.OS === 'web') {
+            ;(globalThis as any).alert?.(`Error: ${error.message}`)
+          } else {
+            Alert.alert('Error', error.message)
+          }
+          return
+        }
+
+        const todayKey = new Date().toISOString().slice(0, 10)
+        await supabase
+          .from('task_executions')
+          .update({ status: 'missed' })
+          .eq('task_id', taskId)
+          .eq('status', 'pending')
+          .gte('scheduled_date', todayKey)
+
+        setActiveTasks(prev => prev.filter(t => t.id !== taskId))
+        setSelectedTaskNames(prev => prev.filter(n => n !== taskName))
+        setCustomTasks(prev => prev.filter(t => t.id !== taskId))
+        setScreenFeedback({ type: 'success', message: `"${taskName}" eliminada.` })
+      } finally {
+        setSaving(false)
+      }
+    }
+
+    if (Platform.OS === 'web') {
+      const confirmed = (globalThis as any).confirm?.(
+        `¿Eliminar "${taskName}" del hogar? Esto la desactivará para todos los miembros.`
+      )
+      if (confirmed) {
+        await performDeactivate()
+      }
+      return
+    }
+
+    Alert.alert(
+      'Eliminar tarea',
+      `¿Eliminar "${taskName}" del hogar? Esto la desactivará para todos los miembros.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            void performDeactivate()
+          },
+        },
+      ]
+    )
+  }
+
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator color={Colors.primary} />
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={145} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={220} height={34} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="75%" height={16} />
+          </View>
+
+          <View style={styles.card}>
+            <Skeleton width="52%" height={22} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={42} />
+          </View>
+
+          <View style={styles.card}>
+            <Skeleton width="58%" height={22} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={120} />
+          </View>
+        </ScrollView>
       </View>
     )
   }
@@ -571,6 +701,36 @@ export default function ConfigureHouseholdTasksScreen() {
               </View>
             </Reveal>
 
+            <Reveal delay={80}>
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Tareas activas ({activeTasks.length})</Text>
+                {activeTasks.length === 0 ? (
+                  <Text style={styles.cardSubtitle}>No hay tareas activas aún.</Text>
+                ) : (
+                  <View style={styles.activeTaskList}>
+                    {activeTasks.map(task => (
+                      <View key={task.id} style={styles.activeTaskRow}>
+                        <View style={styles.activeTaskInfo}>
+                          <Text style={styles.activeTaskName}>{task.name}</Text>
+                          <Text style={styles.activeTaskMeta}>
+                            {task.frequency === 'daily' ? 'Diaria' : task.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
+                            {task.isCustom ? ' · Personalizada' : ''}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={[styles.deactivateButton, saving && styles.buttonDisabled]}
+                          onPress={() => handleDeactivateTask(task.id, task.name)}
+                          disabled={saving}
+                        >
+                          <Text style={styles.deactivateButtonText}>Eliminar</Text>
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </Reveal>
+
             <Reveal delay={90}>
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Tareas fijas disponibles</Text>
@@ -585,6 +745,7 @@ export default function ConfigureHouseholdTasksScreen() {
                         onPress={() => {
                           setTemplateToActivate(template)
                           setTemplateFrequency(template.frequency)
+                          setTemplateAudience('todos')
                           setTemplateTimeDraft(template.notificationTime.slice(0, 5))
                           setTemplateDaysOfWeek(template.dayOfWeek != null ? [template.dayOfWeek] : [1])
                           setTemplateDayOfMonth(template.dayOfMonth ?? 1)
@@ -620,6 +781,21 @@ export default function ConfigureHouseholdTasksScreen() {
                       <Text style={[styles.frequencyChipText, templateFrequency === 'monthly' && styles.frequencyChipTextActive]}>Mensual</Text>
                     </Pressable>
                   </View>
+
+                  <Text style={styles.infoLabel}>Audiencia</Text>
+                  <View style={styles.frequencyRow}>
+                    {TASK_AUDIENCE_OPTIONS.map(option => (
+                      <Pressable
+                        key={option.value}
+                        style={[styles.frequencyChip, templateAudience === option.value && styles.frequencyChipActive]}
+                        onPress={() => setTemplateAudience(option.value)}
+                        disabled={!isProPlan}
+                      >
+                        <Text style={[styles.frequencyChipText, templateAudience === option.value && styles.frequencyChipTextActive]}>{option.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {!isProPlan && <Text style={styles.cardSubtitle}>En Free la audiencia siempre es “Todos”.</Text>}
 
                   {templateFrequency === 'weekly' && (
                     <>
@@ -771,6 +947,20 @@ export default function ConfigureHouseholdTasksScreen() {
                     </Pressable>
                   </View>
 
+                  <Text style={styles.infoLabel}>Audiencia</Text>
+                  <View style={styles.frequencyRow}>
+                    {TASK_AUDIENCE_OPTIONS.map(option => (
+                      <Pressable
+                        key={`custom-${option.value}`}
+                        style={[styles.frequencyChip, customTaskAudience === option.value && styles.frequencyChipActive]}
+                        onPress={() => setCustomTaskAudience(option.value)}
+                        disabled={!isProPlan}
+                      >
+                        <Text style={[styles.frequencyChipText, customTaskAudience === option.value && styles.frequencyChipTextActive]}>{option.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
                   {customTaskFrequency === 'weekly' && (
                     <>
                       <View style={styles.dayChipsRow}>
@@ -920,16 +1110,16 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxl,
   },
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#2E1A11',
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: '#164E63',
+    borderColor: '#8F5B3E',
     padding: Spacing.lg,
     gap: Spacing.xs,
     ...ShadowPresets.soft,
   },
   eyebrow: {
-    color: '#5EEAD4',
+    color: '#F4DCC3',
     textTransform: 'uppercase',
     fontWeight: '700',
     letterSpacing: 0.8,
@@ -941,12 +1131,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   title: {
-    color: '#F8FAFC',
+    color: '#FFF8F1',
     fontSize: 26,
     fontWeight: '800',
   },
   subtitle: {
-    color: '#CBD5E1',
+    color: '#E8D9C8',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -979,8 +1169,8 @@ const styles = StyleSheet.create({
     width: '23%',
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#DBE3F0',
-    backgroundColor: '#F8FAFF',
+    borderColor: '#EADFCC',
+    backgroundColor: '#FFF8F1',
     padding: 6,
     gap: 4,
   },
@@ -991,12 +1181,12 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E0D2BC',
     alignItems: 'center',
     justifyContent: 'center',
   },
   templateThumbText: {
-    color: '#0F172A',
+    color: '#2F241F',
     fontWeight: '800',
     fontSize: 13,
     letterSpacing: 0.3,
@@ -1009,7 +1199,7 @@ const styles = StyleSheet.create({
     minHeight: 26,
   },
   templateMeta: {
-    color: '#475569',
+    color: '#7A6758',
     fontSize: 10,
     fontWeight: '600',
   },
@@ -1020,22 +1210,22 @@ const styles = StyleSheet.create({
   frequencyChip: {
     borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
+    borderColor: '#D8C9B4',
+    backgroundColor: '#FFF6EC',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
   },
   frequencyChipActive: {
-    borderColor: '#1D4ED8',
-    backgroundColor: '#DBEAFE',
+    borderColor: '#C96B2C',
+    backgroundColor: '#FCE8D9',
   },
   frequencyChipText: {
-    color: '#334155',
+    color: '#7A6758',
     fontSize: 12,
     fontWeight: '700',
   },
   frequencyChipTextActive: {
-    color: '#1E3A8A',
+    color: '#8F3F0A',
   },
   dayChipsRow: {
     flexDirection: 'row',
@@ -1044,23 +1234,23 @@ const styles = StyleSheet.create({
   },
   dayChip: {
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#D8C9B4',
     borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
     backgroundColor: '#FFFFFF',
   },
   dayChipActive: {
-    borderColor: '#1D4ED8',
-    backgroundColor: '#DBEAFE',
+    borderColor: '#C96B2C',
+    backgroundColor: '#FCE8D9',
   },
   dayChipText: {
-    color: '#334155',
+    color: '#7A6758',
     fontSize: 12,
     fontWeight: '700',
   },
   dayChipTextActive: {
-    color: '#1E3A8A',
+    color: '#8F3F0A',
   },
   blockSectionTitle: {
     color: Colors.text.secondary,
@@ -1071,9 +1261,9 @@ const styles = StyleSheet.create({
   },
   extraBlockCard: {
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#F1D7B8',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: '#FFF6EC',
     padding: Spacing.sm,
     gap: Spacing.xs,
   },
@@ -1089,27 +1279,27 @@ const styles = StyleSheet.create({
   },
   removeBlockButton: {
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: '#E5B9A9',
     borderRadius: BorderRadius.full,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FBEAE4',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 5,
   },
   removeBlockButtonText: {
-    color: '#B91C1C',
+    color: '#A14A33',
     fontSize: 11,
     fontWeight: '700',
   },
   addBlockButton: {
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#E6C6A1',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#FFF1E4',
     alignItems: 'center',
     paddingVertical: Spacing.xs + 2,
   },
   addBlockButtonText: {
-    color: '#1D4ED8',
+    color: '#B45309',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1140,7 +1330,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#D8C9B4',
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
@@ -1149,7 +1339,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryButtonText: {
-    color: '#334155',
+    color: '#7A6758',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1171,31 +1361,31 @@ const styles = StyleSheet.create({
   planHintBox: {
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#CCFBF1',
-    backgroundColor: '#ECFDF5',
+    borderColor: '#F1D7B8',
+    backgroundColor: '#FFF4E8',
     padding: Spacing.sm,
     gap: 4,
   },
   planHintTitle: {
-    color: '#0F766E',
+    color: '#8F5B3E',
     fontSize: 13,
     fontWeight: '700',
   },
   planHintText: {
-    color: '#115E59',
+    color: '#7A6758',
     fontSize: 12,
     lineHeight: 16,
   },
   backButton: {
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#E6C6A1',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: '#FFF1E4',
     alignItems: 'center',
     paddingVertical: Spacing.sm,
   },
   backButtonText: {
-    color: '#1D4ED8',
+    color: '#B45309',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1206,12 +1396,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   feedbackSuccess: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
+    backgroundColor: '#EEF6F0',
+    borderColor: '#CFE2D3',
   },
   feedbackError: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    backgroundColor: '#FBEAE4',
+    borderColor: '#E5B9A9',
   },
   feedbackText: {
     fontSize: 13,
@@ -1219,9 +1409,47 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   feedbackTextSuccess: {
-    color: '#065F46',
+    color: '#3F7D58',
   },
   feedbackTextError: {
-    color: '#991B1B',
+    color: '#A14A33',
+  },
+  activeTaskList: {
+    gap: Spacing.xs,
+  },
+  activeTaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFE2D0',
+  },
+  activeTaskInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  activeTaskName: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTaskMeta: {
+    color: Colors.text.secondary,
+    fontSize: 11,
+  },
+  deactivateButton: {
+    borderWidth: 1,
+    borderColor: '#E5B9A9',
+    borderRadius: BorderRadius.full,
+    backgroundColor: '#FBEAE4',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+    marginLeft: Spacing.sm,
+  },
+  deactivateButtonText: {
+    color: '#A14A33',
+    fontSize: 11,
+    fontWeight: '700',
   },
 })

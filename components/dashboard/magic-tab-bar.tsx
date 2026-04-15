@@ -1,10 +1,20 @@
-import { Ionicons } from '@expo/vector-icons'
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { BorderRadius, Colors } from '../../constants/theme'
 
-type RouteIconName = keyof typeof Ionicons.glyphMap
+type RouteIconName =
+  | 'home'
+  | 'home-outline'
+  | 'calendar'
+  | 'calendar-outline'
+  | 'people'
+  | 'people-outline'
+  | 'bar-chart'
+  | 'bar-chart-outline'
+  | 'ellipse'
+  | 'ellipse-outline'
+
 const TAB_HORIZONTAL_PADDING = 8
 const INDICATOR_SIZE = 52
 const LABEL_PILL_WIDTH = 64
@@ -70,6 +80,19 @@ function resolveShortLabel(routeName: string): string {
   if (routeName === 'household-today') return 'Casa'
   if (routeName === 'household-month') return 'Hogar'
   return ''
+}
+
+function resolveIconGlyph(iconName: RouteIconName): string {
+  if (iconName === 'home') return '⌂'
+  if (iconName === 'home-outline') return '⌂'
+  if (iconName === 'calendar') return '◫'
+  if (iconName === 'calendar-outline') return '◫'
+  if (iconName === 'people') return '◉'
+  if (iconName === 'people-outline') return '◉'
+  if (iconName === 'bar-chart') return '▮'
+  if (iconName === 'bar-chart-outline') return '▯'
+  if (iconName === 'ellipse') return '●'
+  return '○'
 }
 
 export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -167,7 +190,7 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
                 },
               ]}
             >
-              <Ionicons name={activeIconName} size={22} color={Colors.text.inverse} />
+              <Text style={styles.activeIconText}>{resolveIconGlyph(activeIconName)}</Text>
 
               <View style={styles.activeLabelPill}>
                 <Text style={styles.activeLabelPillText}>{resolveShortLabel(activeRouteName)}</Text>
@@ -224,7 +247,7 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
                   }}
                 >
                   <Animated.View style={[styles.iconWrap, { transform: [{ scale: routeIndex >= 0 ? iconScale[routeIndex] : 1 }] }]}>
-                    <Ionicons name={iconName} size={22} color={tintColor} />
+                    <Text style={[styles.iconText, { color: tintColor }]}>{resolveIconGlyph(iconName)}</Text>
                   </Animated.View>
                 </Pressable>
               )
@@ -279,6 +302,15 @@ const styles = StyleSheet.create({
     height: INDICATOR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconText: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  activeIconText: {
+    color: Colors.text.inverse,
+    fontSize: 20,
+    fontWeight: '900',
   },
   activeLabelPill: {
     position: 'absolute',

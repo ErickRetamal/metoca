@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
@@ -20,21 +21,26 @@ function shouldShowAlert(completed: number, assigned: number): boolean {
 export default function HouseholdTodayScreen() {
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
   const [householdName, setHouseholdName] = useState('')
-  const [rows, setRows] = useState(getHouseholdTodaySummary())
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof getHouseholdTodaySummaryAsync>>>(getHouseholdTodaySummary())
+  const [loading, setLoading] = useState(true)
   const { onMenuPress } = useMenuContext()
 
   useEffect(() => {
     let mounted = true
 
     async function loadSummary() {
-      const [name, summaryRows] = await Promise.all([
-        getHouseholdNameAsync(),
-        getHouseholdTodaySummaryAsync(),
-      ])
+      try {
+        const [name, summaryRows] = await Promise.all([
+          getHouseholdNameAsync(),
+          getHouseholdTodaySummaryAsync(),
+        ])
 
-      if (!mounted) return
-      setHouseholdName(name)
-      setRows(summaryRows)
+        if (!mounted) return
+        setHouseholdName(name)
+        setRows(summaryRows)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
     loadSummary()
@@ -61,6 +67,33 @@ export default function HouseholdTodayScreen() {
   const totalCompleted = rows.reduce((acc, row) => acc + row.completed, 0)
   const totalProgress = totalAssigned === 0 ? 0 : Math.round((totalCompleted / totalAssigned) * 100)
   const laggingCount = rows.filter(row => shouldShowAlert(row.completed, row.assigned)).length
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.bgShapeTop} />
+        <View style={styles.bgShapeBottom} />
+
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={140} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={220} height={30} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={180} height={14} style={{ marginBottom: Spacing.md }} />
+            <View style={styles.summaryChips}>
+              <Skeleton width="48%" height={58} />
+              <Skeleton width="48%" height={58} />
+            </View>
+          </View>
+
+          <View style={styles.listCard}>
+            <Skeleton width="100%" height={76} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={76} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={76} />
+          </View>
+        </ScrollView>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.container}>
@@ -154,7 +187,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#CCFBF1',
+    backgroundColor: '#F6E6D5',
   },
   bgShapeBottom: {
     position: 'absolute',
@@ -163,19 +196,24 @@ const styles = StyleSheet.create({
     width: 260,
     height: 260,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#EFE3D4',
   },
   headerCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#2E1A11',
     borderWidth: 1,
-    borderColor: '#164E63',
+    borderColor: '#8F5B3E',
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
     gap: Spacing.xs,
     ...ShadowPresets.card,
   },
+  headerMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
   eyebrow: {
-    color: '#5EEAD4',
+    color: '#F4DCC3',
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -187,12 +225,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#FFF8F1',
   },
   summary: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#CBD5E1',
+    color: '#E8D9C8',
   },
   summaryChips: {
     flexDirection: 'row',
@@ -204,17 +242,17 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.sm + 2,
     borderRadius: BorderRadius.md,
-    backgroundColor: 'rgba(45, 212, 191, 0.1)',
+    backgroundColor: 'rgba(244, 220, 195, 0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(94, 234, 212, 0.14)',
+    borderColor: 'rgba(244, 220, 195, 0.24)',
   },
   summaryChipValue: {
-    color: '#F8FAFC',
+    color: '#FFF8F1',
     fontWeight: '800',
     fontSize: 16,
   },
   summaryChipLabel: {
-    color: '#99F6E4',
+    color: '#F4DCC3',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -229,7 +267,7 @@ const styles = StyleSheet.create({
   },
   memberBlock: {
     borderBottomWidth: 1,
-    borderBottomColor: '#E5EDF6',
+    borderBottomColor: '#EFE2D0',
     paddingVertical: Spacing.sm + 2,
     gap: Spacing.xs,
   },
@@ -238,7 +276,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   memberHeaderExpanded: {
-    opacity: 0.98,
+    opacity: 1,
   },
   memberIdentity: {
     flexDirection: 'row',
@@ -249,12 +287,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#CCFBF1',
+    backgroundColor: '#F6E6D5',
     alignItems: 'center',
     justifyContent: 'center',
   },
   memberAvatarText: {
-    color: '#0F766E',
+    color: '#8F5B3E',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -287,12 +325,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   memberTasks: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFF6EC',
     borderRadius: BorderRadius.md,
     padding: Spacing.sm,
     gap: Spacing.xs,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#EADFCC',
   },
   taskRow: {
     flexDirection: 'row',

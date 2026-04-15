@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { BorderRadius, Colors, Spacing, ShadowPresets } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
@@ -22,23 +23,25 @@ interface TaskTemplate {
 }
 
 const TASK_TEMPLATES: TaskTemplate[] = [
-  { key: 'dishes', name: 'Lavar platos', code: 'LP', color: '#DBEAFE', frequency: 'daily', notificationTime: '20:00:00' },
-  { key: 'trash', name: 'Sacar basura', code: 'SB', color: '#E0E7FF', frequency: 'daily', notificationTime: '21:00:00' },
-  { key: 'sweep', name: 'Barrer piso', code: 'BP', color: '#FCE7F3', frequency: 'daily', notificationTime: '19:00:00' },
-  { key: 'bathroom', name: 'Limpiar bano', code: 'LB', color: '#ECFEFF', frequency: 'weekly', notificationTime: '10:00:00', dayOfWeek: 6 },
-  { key: 'laundry', name: 'Lavar ropa', code: 'LR', color: '#F0FDF4', frequency: 'weekly', notificationTime: '11:00:00', dayOfWeek: 3 },
-  { key: 'kitchen', name: 'Orden cocina', code: 'OC', color: '#FFF7ED', frequency: 'daily', notificationTime: '18:30:00' },
-  { key: 'beds', name: 'Hacer camas', code: 'HC', color: '#FEF3C7', frequency: 'daily', notificationTime: '08:00:00' },
-  { key: 'plants', name: 'Regar plantas', code: 'RP', color: '#DCFCE7', frequency: 'weekly', notificationTime: '09:00:00', dayOfWeek: 2 },
-  { key: 'fridge', name: 'Revisar refri', code: 'RR', color: '#FAE8FF', frequency: 'weekly', notificationTime: '20:30:00', dayOfWeek: 0 },
-  { key: 'dust', name: 'Quitar polvo', code: 'QP', color: '#EEF2FF', frequency: 'weekly', notificationTime: '12:00:00', dayOfWeek: 5 },
-  { key: 'windows', name: 'Limpiar vidrios', code: 'LV', color: '#E0F2FE', frequency: 'monthly', notificationTime: '10:30:00', dayOfMonth: 10 },
-  { key: 'pantry', name: 'Orden despensa', code: 'OD', color: '#FEF9C3', frequency: 'monthly', notificationTime: '17:00:00', dayOfMonth: 12 },
-  { key: 'garage', name: 'Orden garage', code: 'OG', color: '#FFE4E6', frequency: 'monthly', notificationTime: '16:00:00', dayOfMonth: 15 },
-  { key: 'shopping', name: 'Lista compras', code: 'LC', color: '#F5F3FF', frequency: 'weekly', notificationTime: '18:00:00', dayOfWeek: 4 },
-  { key: 'bathsupplies', name: 'Reponer bano', code: 'RB', color: '#ECFCCB', frequency: 'weekly', notificationTime: '13:00:00', dayOfWeek: 1 },
-  { key: 'pet', name: 'Zona mascota', code: 'ZM', color: '#FDF2F8', frequency: 'daily', notificationTime: '19:30:00' },
+  { key: 'dishes', name: 'Lavar platos', code: 'LP', color: '#FCE8D9', frequency: 'daily', notificationTime: '20:00:00' },
+  { key: 'trash', name: 'Sacar basura', code: 'SB', color: '#F7E4DB', frequency: 'daily', notificationTime: '21:00:00' },
+  { key: 'sweep', name: 'Barrer piso', code: 'BP', color: '#FBE7DE', frequency: 'daily', notificationTime: '19:00:00' },
+  { key: 'bathroom', name: 'Limpiar bano', code: 'LB', color: '#F6EBDD', frequency: 'weekly', notificationTime: '10:00:00', dayOfWeek: 6 },
+  { key: 'laundry', name: 'Lavar ropa', code: 'LR', color: '#E8F0E6', frequency: 'weekly', notificationTime: '11:00:00', dayOfWeek: 3 },
+  { key: 'kitchen', name: 'Orden cocina', code: 'OC', color: '#FFF1E4', frequency: 'daily', notificationTime: '18:30:00' },
+  { key: 'beds', name: 'Hacer camas', code: 'HC', color: '#F9EED0', frequency: 'daily', notificationTime: '08:00:00' },
+  { key: 'plants', name: 'Regar plantas', code: 'RP', color: '#EAF3E8', frequency: 'weekly', notificationTime: '09:00:00', dayOfWeek: 2 },
+  { key: 'fridge', name: 'Revisar refri', code: 'RR', color: '#F6EDE8', frequency: 'weekly', notificationTime: '20:30:00', dayOfWeek: 0 },
+  { key: 'dust', name: 'Quitar polvo', code: 'QP', color: '#F3ECE6', frequency: 'weekly', notificationTime: '12:00:00', dayOfWeek: 5 },
+  { key: 'windows', name: 'Limpiar vidrios', code: 'LV', color: '#EEE5D9', frequency: 'monthly', notificationTime: '10:30:00', dayOfMonth: 10 },
+  { key: 'pantry', name: 'Orden despensa', code: 'OD', color: '#F6ECD4', frequency: 'monthly', notificationTime: '17:00:00', dayOfMonth: 12 },
+  { key: 'garage', name: 'Orden garage', code: 'OG', color: '#F6DFD7', frequency: 'monthly', notificationTime: '16:00:00', dayOfMonth: 15 },
+  { key: 'shopping', name: 'Lista compras', code: 'LC', color: '#EFE8E1', frequency: 'weekly', notificationTime: '18:00:00', dayOfWeek: 4 },
+  { key: 'bathsupplies', name: 'Reponer bano', code: 'RB', color: '#EAF1DE', frequency: 'weekly', notificationTime: '13:00:00', dayOfWeek: 1 },
+  { key: 'pet', name: 'Zona mascota', code: 'ZM', color: '#F8E7E3', frequency: 'daily', notificationTime: '19:30:00' },
 ]
+
+type MemberProfile = 'adulto' | 'joven'
 
 interface HouseholdData {
   id: string
@@ -46,15 +49,31 @@ interface HouseholdData {
   adminUserId: string
   inviteCode: string
   adminName: string
-  members: { id: string; name: string }[]
+  members: { id: string; name: string; profile: MemberProfile }[]
 }
 
 type AppPlan = 'free' | 'hogar' | 'familia'
+
+interface PlanGuardNotice {
+  overCapacity: boolean
+  effectivePlan: AppPlan
+  maxMembers: number
+  activeMembers: number
+  membersToRemove: number
+  graceEndsAt: string | null
+  membersPreview: Array<{ user_id: string; name: string }>
+}
 
 function getCustomTaskLimit(plan: AppPlan): number {
   if (plan === 'hogar') return 5
   if (plan === 'familia') return 30
   return 0
+}
+
+function getPlanLabel(plan: AppPlan): string {
+  if (plan === 'hogar') return 'Hogar'
+  if (plan === 'familia') return 'Familia'
+  return 'Gratis'
 }
 
 function getTaskCode(name: string): string {
@@ -65,7 +84,7 @@ function getTaskCode(name: string): string {
 }
 
 function getTaskThumbColor(name: string): string {
-  const palette = ['#DBEAFE', '#DCFCE7', '#FCE7F3', '#FEF3C7', '#E0E7FF', '#E0F2FE', '#F5F3FF', '#FFE4E6']
+  const palette = ['#FCE8D9', '#EAF3E8', '#FBE7DE', '#F9EED0', '#F7E4DB', '#EEE5D9', '#EFE8E1', '#F6DFD7']
   const hash = Array.from(name).reduce((acc, char) => acc + char.charCodeAt(0), 0)
   return palette[hash % palette.length]
 }
@@ -80,6 +99,7 @@ export default function HouseholdScreen() {
   const [selectedTaskNames, setSelectedTaskNames] = useState<string[]>([])
   const [customTasks, setCustomTasks] = useState<Array<{ id: string; name: string; frequency: 'daily' | 'weekly' | 'monthly' }>>([])
   const [plan, setPlan] = useState<AppPlan>('free')
+  const [planGuardNotice, setPlanGuardNotice] = useState<PlanGuardNotice | null>(null)
   const [customTaskNameDraft, setCustomTaskNameDraft] = useState('')
   const [customTaskFrequency, setCustomTaskFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
 
@@ -118,6 +138,7 @@ export default function HouseholdScreen() {
 
       if (!membership?.household_id) {
         setHousehold(null)
+        setPlanGuardNotice(null)
         setSelectedTaskNames([])
         setCustomTasks([])
         return
@@ -131,20 +152,22 @@ export default function HouseholdScreen() {
           .maybeSingle(),
         supabase
           .from('household_members')
-          .select('user_id, users(name, email)')
+          .select('user_id, profile, users(name, email)')
           .eq('household_id', membership.household_id)
           .eq('status', 'active'),
       ])
 
       if (!hh) {
         setHousehold(null)
+        setPlanGuardNotice(null)
         return
       }
 
-      const members: { id: string; name: string }[] =
+      const members: { id: string; name: string; profile: MemberProfile }[] =
         (memberRows ?? []).map((row: any) => ({
           id: row.user_id,
           name: row.users?.name ?? row.users?.email?.split('@')[0] ?? 'Miembro',
+          profile: (row.profile ?? 'adulto') as MemberProfile,
         }))
 
       const adminMember = members.find(m => m.id === hh.admin_user_id)
@@ -158,6 +181,30 @@ export default function HouseholdScreen() {
         adminName,
         members,
       })
+
+      const { data: guardData } = await supabase.rpc('get_household_plan_guard_status', {
+        p_household_id: hh.id,
+      })
+
+      if (guardData && (guardData as any).over_capacity === true) {
+        const rawMembers = Array.isArray((guardData as any).members_preview) ? (guardData as any).members_preview : []
+        setPlanGuardNotice({
+          overCapacity: true,
+          effectivePlan: ((guardData as any).effective_plan ?? 'free') as AppPlan,
+          maxMembers: Number((guardData as any).max_members ?? 2),
+          activeMembers: Number((guardData as any).active_members ?? members.length),
+          membersToRemove: Number((guardData as any).members_to_remove ?? 0),
+          graceEndsAt: typeof (guardData as any).grace_ends_at === 'string' ? (guardData as any).grace_ends_at : null,
+          membersPreview: rawMembers
+            .map((row: any) => ({
+              user_id: String(row.user_id ?? ''),
+              name: String(row.name ?? 'Miembro'),
+            }))
+            .filter((row: any) => row.user_id),
+        })
+      } else {
+        setPlanGuardNotice(null)
+      }
 
       await loadHouseholdTasks(hh.id)
     } finally {
@@ -415,6 +462,38 @@ export default function HouseholdScreen() {
     )
   }
 
+  async function handleUpdateMemberProfile(memberId: string, profile: MemberProfile) {
+    if (!household || !currentUserId) return
+    if (household.adminUserId !== currentUserId) return
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('household_members')
+        .update({ profile })
+        .eq('household_id', household.id)
+        .eq('user_id', memberId)
+        .eq('status', 'active')
+
+      if (error) {
+        Alert.alert('Error', error.message)
+        return
+      }
+
+      setHousehold(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          members: prev.members.map(member =>
+            member.id === memberId ? { ...member, profile } : member
+          ),
+        }
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleSaveEdit() {
     const name = editNameDraft.trim()
     if (!name) {
@@ -468,6 +547,23 @@ export default function HouseholdScreen() {
         if (error) {
           Alert.alert('Error', error.message)
           return
+        }
+
+        const { data: deactivatedTasks } = await supabase
+          .from('tasks')
+          .select('id')
+          .eq('household_id', household.id)
+          .eq('name', template.name)
+
+        const todayKey = new Date().toISOString().slice(0, 10)
+        const deactivatedIds = (deactivatedTasks ?? []).map((row: any) => row.id)
+        if (deactivatedIds.length > 0) {
+          await supabase
+            .from('task_executions')
+            .update({ status: 'missed' })
+            .in('task_id', deactivatedIds)
+            .eq('status', 'pending')
+            .gte('scheduled_date', todayKey)
         }
 
         setSelectedTaskNames(prev => prev.filter(name => name !== template.name))
@@ -615,6 +711,14 @@ export default function HouseholdScreen() {
         return
       }
 
+      const todayKey = new Date().toISOString().slice(0, 10)
+      await supabase
+        .from('task_executions')
+        .update({ status: 'missed' })
+        .eq('task_id', taskId)
+        .eq('status', 'pending')
+        .gte('scheduled_date', todayKey)
+
       await loadHouseholdTasks(household.id)
     } finally {
       setSaving(false)
@@ -625,11 +729,36 @@ export default function HouseholdScreen() {
   const isProPlan = plan !== 'free'
   const transferCandidates = household?.members.filter(member => member.id !== currentUserId) ?? []
   const isOnlyMember = Boolean(isAdmin && household && household.members.length === 1)
+  const graceDaysLeft = planGuardNotice?.graceEndsAt
+    ? Math.max(0, Math.ceil((new Date(planGuardNotice.graceEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={Colors.primary} />
+      <View style={styles.container}>
+        <View style={styles.bgShapeTop} />
+        <View style={styles.bgShapeBottom} />
+
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={120} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={180} height={34} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="78%" height={16} />
+          </View>
+
+          <View style={styles.card}>
+            <Skeleton width="55%" height={22} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={16} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="90%" height={16} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="65%" height={42} />
+          </View>
+
+          <View style={styles.card}>
+            <Skeleton width="48%" height={22} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={60} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={60} />
+          </View>
+        </ScrollView>
       </View>
     )
   }
@@ -652,8 +781,34 @@ export default function HouseholdScreen() {
             <Text style={styles.subtitle}>
               {household ? 'Organiza tu hogar y sus miembros.' : 'Crea un hogar o únete con un código.'}
             </Text>
+            {household ? (
+              <View style={styles.headerPlanPill}>
+                <Text style={styles.headerPlanPillLabel}>Plan del hogar</Text>
+                <Text style={styles.headerPlanPillValue}>{getPlanLabel(plan)}</Text>
+              </View>
+            ) : null}
           </View>
         </Reveal>
+
+        {household && planGuardNotice?.overCapacity && (
+          <View style={styles.guardWarningBox}>
+            <Text style={styles.guardWarningTitle}>Cambio de plan detectado</Text>
+            <Text style={styles.guardWarningText}>
+              Tu hogar tiene {planGuardNotice.activeMembers} miembros, pero el plan {planGuardNotice.effectivePlan} permite {planGuardNotice.maxMembers}.
+            </Text>
+            <Text style={styles.guardWarningText}>
+              Si no actualizan el plan en {graceDaysLeft ?? 0} días, se removerán {planGuardNotice.membersToRemove} miembro(s) por menor antigüedad.
+            </Text>
+            {planGuardNotice.membersPreview.length > 0 && (
+              <Text style={styles.guardWarningMembers}>
+                Posibles removidos: {planGuardNotice.membersPreview.map(member => member.name).join(', ')}
+              </Text>
+            )}
+            <Pressable style={styles.guardWarningButton} onPress={() => goToPaywall('household-over-capacity-warning')}>
+              <Text style={styles.guardWarningButtonText}>Actualizar plan</Text>
+            </Pressable>
+          </View>
+        )}
 
         {household ? (
           <>
@@ -729,8 +884,30 @@ export default function HouseholdScreen() {
                   </View>
                   <View style={styles.memberInfo}>
                     <Text style={styles.memberName}>{m.id === currentUserId ? `${m.name} (tú)` : m.name}</Text>
-                    {m.id === household.adminUserId && (
-                      <Text style={styles.memberRole}>Jefe de hogar</Text>
+                    <View style={styles.memberMetaRow}>
+                      {m.id === household.adminUserId && (
+                        <Text style={styles.memberRole}>Jefe de hogar</Text>
+                      )}
+                      <Text style={styles.memberProfileLabel}>{m.profile === 'adulto' ? 'Adulto' : 'Joven'}</Text>
+                    </View>
+
+                    {isAdmin && (
+                      <View style={styles.memberProfileChips}>
+                        <Pressable
+                          style={[styles.memberProfileChip, m.profile === 'adulto' && styles.memberProfileChipActive]}
+                          onPress={() => handleUpdateMemberProfile(m.id, 'adulto')}
+                          disabled={saving}
+                        >
+                          <Text style={[styles.memberProfileChipText, m.profile === 'adulto' && styles.memberProfileChipTextActive]}>Adulto</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.memberProfileChip, m.profile === 'joven' && styles.memberProfileChipActive]}
+                          onPress={() => handleUpdateMemberProfile(m.id, 'joven')}
+                          disabled={saving}
+                        >
+                          <Text style={[styles.memberProfileChipText, m.profile === 'joven' && styles.memberProfileChipTextActive]}>Joven</Text>
+                        </Pressable>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -880,7 +1057,7 @@ const styles = StyleSheet.create({
     height: 230,
     borderRadius: BorderRadius.full,
     backgroundColor: '#F8CFA9',
-    opacity: 0.08,
+    opacity: 0.1,
   },
   bgShapeBottom: {
     position: 'absolute',
@@ -890,7 +1067,7 @@ const styles = StyleSheet.create({
     height: 260,
     borderRadius: BorderRadius.full,
     backgroundColor: '#F5DECA',
-    opacity: 0.06,
+    opacity: 0.08,
   },
   headerCard: {
     backgroundColor: '#4A2F1E',
@@ -922,6 +1099,30 @@ const styles = StyleSheet.create({
     color: '#F1D7BF',
     fontSize: 14,
     lineHeight: 20,
+  },
+  headerPlanPill: {
+    marginTop: Spacing.md,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 220, 195, 0.34)',
+    backgroundColor: 'rgba(244, 220, 195, 0.14)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerPlanPillLabel: {
+    color: '#F4DCC3',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  headerPlanPillValue: {
+    color: '#FFF8F1',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   card: {
     backgroundColor: Colors.surface,
@@ -1013,6 +1214,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  memberMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: 2,
+  },
+  memberProfileLabel: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  memberProfileChips: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  memberProfileChip: {
+    borderWidth: 1,
+    borderColor: '#D8C9B4',
+    borderRadius: BorderRadius.full,
+    backgroundColor: '#FFF6EC',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  memberProfileChipActive: {
+    borderColor: '#C57B2A',
+    backgroundColor: '#FCEEDA',
+  },
+  memberProfileChipText: {
+    color: '#57534E',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  memberProfileChipTextActive: {
+    color: '#8A4C1B',
+  },
   templateGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1023,8 +1260,8 @@ const styles = StyleSheet.create({
     width: '23%',
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#E7D6C4',
-    backgroundColor: '#FFFAF5',
+    borderColor: '#EADFCC',
+    backgroundColor: '#FFF8F1',
     padding: 6,
     gap: 4,
   },
@@ -1039,12 +1276,12 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#D8C9B4',
     alignItems: 'center',
     justifyContent: 'center',
   },
   templateThumbText: {
-    color: '#0F172A',
+    color: '#2F241F',
     fontWeight: '800',
     fontSize: 13,
     letterSpacing: 0.3,
@@ -1065,8 +1302,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: '#E8D5B6',
-    backgroundColor: '#FDF5E8',
+    borderColor: '#F1D7B8',
+    backgroundColor: '#FFF4E8',
     padding: Spacing.sm,
     gap: 4,
   },
@@ -1079,6 +1316,43 @@ const styles = StyleSheet.create({
     color: '#7A6758',
     fontSize: 12,
     lineHeight: 16,
+  },
+  guardWarningBox: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#E6C6A1',
+    backgroundColor: '#FFF3E6',
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  guardWarningTitle: {
+    color: '#8A4C1B',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  guardWarningText: {
+    color: '#7A6758',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  guardWarningMembers: {
+    color: '#A8612A',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  guardWarningButton: {
+    marginTop: Spacing.xs,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#C57B2A',
+    backgroundColor: '#FCEEDA',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  guardWarningButtonText: {
+    color: '#8A4C1B',
+    fontSize: 13,
+    fontWeight: '800',
   },
   customTaskEditor: {
     marginTop: Spacing.sm,
@@ -1096,8 +1370,8 @@ const styles = StyleSheet.create({
   frequencyChip: {
     borderRadius: BorderRadius.full,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
+    borderColor: '#D8C9B4',
+    backgroundColor: '#FFF6EC',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
   },
@@ -1106,7 +1380,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FCEEDA',
   },
   frequencyChipText: {
-    color: '#334155',
+    color: '#7A6758',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1131,9 +1405,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
     borderWidth: 1,
-    borderColor: '#E7D6C4',
+    borderColor: '#EADFCC',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#FFFAF5',
+    backgroundColor: '#FFF8F1',
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
   },
@@ -1142,12 +1416,12 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: BorderRadius.sm,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#D8C9B4',
     alignItems: 'center',
     justifyContent: 'center',
   },
   customTaskThumbText: {
-    color: '#0F172A',
+    color: '#2F241F',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,
@@ -1208,7 +1482,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dangerButton: {
-    borderWidth: 1.5,
+    marginTop: Spacing.sm,
+    borderWidth: 1,
     borderColor: Colors.danger,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.sm,
@@ -1232,9 +1507,9 @@ const styles = StyleSheet.create({
   },
   transferButton: {
     borderWidth: 1,
-    borderColor: '#D9A576',
+    borderColor: '#E6C6A1',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#F9E8D6',
+    backgroundColor: '#FFF1E4',
     paddingVertical: Spacing.sm,
     alignItems: 'center',
   },

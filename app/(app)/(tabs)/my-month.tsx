@@ -3,6 +3,7 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, Spacing } from '../../../constants/theme'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { supabase } from '../../../lib/supabase'
 import { goToPaywall } from '../../../lib/navigation'
 import {
@@ -119,6 +120,7 @@ export default function MyMonthScreen() {
   const insets = useSafeAreaInsets()
   const params = useLocalSearchParams<{ memberId?: string, memberName?: string }>()
   const [monthOffset, setMonthOffset] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [plan, setPlan] = useState(CURRENT_PLAN)
   const [tasks, setTasks] = useState(getMyMonthTasks(0, params.memberId))
   const [currentUserName, setCurrentUserName] = useState('')
@@ -149,8 +151,13 @@ export default function MyMonthScreen() {
     let mounted = true
 
     async function loadMonthTasks() {
-      const nextTasks = await getMonthTasksAsync(monthOffset, memberId)
-      if (mounted) setTasks(nextTasks)
+      if (mounted) setLoading(true)
+      try {
+        const nextTasks = await getMonthTasksAsync(monthOffset, memberId)
+        if (mounted) setTasks(nextTasks)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
     loadMonthTasks()
@@ -290,7 +297,7 @@ export default function MyMonthScreen() {
   }
 
   const moveMonth = (direction: -1 | 1) => {
-    if (!canNavigateHistory && direction !== 0) {
+    if (!canNavigateHistory) {
       Alert.alert(
         'Plan Gratis',
         'El historial de meses anteriores esta disponible en planes Hogar y Familia.',
@@ -303,6 +310,27 @@ export default function MyMonthScreen() {
     }
 
     setMonthOffset(prev => prev + direction)
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={140} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={220} height={30} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={170} height={14} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={68} />
+          </View>
+
+          <View style={styles.fitnessCard}>
+            <Skeleton width={200} height={20} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={64} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={64} />
+          </View>
+        </ScrollView>
+      </View>
+    )
   }
 
   return (

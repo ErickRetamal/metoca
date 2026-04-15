@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
+import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
@@ -36,9 +37,10 @@ function formatFrequencyLabel(frequency: 'daily' | 'weekly' | 'monthly'): string
 export default function HouseholdMonthScreen() {
   const insets = useSafeAreaInsets()
   const [monthOffset, setMonthOffset] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [householdName, setHouseholdName] = useState('')
   const [plan, setPlan] = useState(CURRENT_PLAN)
-  const [summary, setSummary] = useState(getHouseholdMonthSummary(0))
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof getHouseholdMonthSummaryAsync>>>(getHouseholdMonthSummary(0))
   const [monthTasks, setMonthTasks] = useState<HouseholdMonthTaskView[]>([])
   const { onMenuPress } = useMenuContext()
 
@@ -103,13 +105,18 @@ export default function HouseholdMonthScreen() {
     let mounted = true
 
     async function loadSummary() {
-      const [nextSummary, nextMonthTasks] = await Promise.all([
-        getHouseholdMonthSummaryAsync(monthOffset),
-        getHouseholdMonthTasksAsync(monthOffset),
-      ])
-      if (!mounted) return
-      setSummary(nextSummary)
-      setMonthTasks(nextMonthTasks)
+      if (mounted) setLoading(true)
+      try {
+        const [nextSummary, nextMonthTasks] = await Promise.all([
+          getHouseholdMonthSummaryAsync(monthOffset),
+          getHouseholdMonthTasksAsync(monthOffset),
+        ])
+        if (!mounted) return
+        setSummary(nextSummary)
+        setMonthTasks(nextMonthTasks)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
     loadSummary()
@@ -137,6 +144,35 @@ export default function HouseholdMonthScreen() {
   }, [monthOffset])
 
   const canNavigateHistory = plan !== 'free'
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.bgShapeTop} />
+        <View style={styles.bgShapeBottom} />
+
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerCard}>
+            <Skeleton width={150} height={14} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={250} height={32} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width={180} height={14} />
+          </View>
+
+          <View style={styles.chartCard}>
+            <Skeleton width={56} height={170} />
+            <Skeleton width={56} height={170} />
+            <Skeleton width={56} height={170} />
+          </View>
+
+          <View style={styles.listCard}>
+            <Skeleton width={220} height={22} style={{ marginBottom: Spacing.md }} />
+            <Skeleton width="100%" height={66} style={{ marginBottom: Spacing.sm }} />
+            <Skeleton width="100%" height={66} />
+          </View>
+        </ScrollView>
+      </View>
+    )
+  }
 
   const handleMoveMonth = (direction: -1 | 1) => {
     if (!canNavigateHistory) {
