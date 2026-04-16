@@ -2,14 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
-import { BorderRadius, Colors, Spacing } from '../../../constants/theme'
+import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { Skeleton } from '../../../components/ui/skeleton'
+import { HamburgerButton } from '../../../components/dashboard/side-menu'
+import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
 import { goToPaywall } from '../../../lib/navigation'
+import { firstNameOnly } from '../../../lib/user-name'
 import {
   CURRENT_PLAN,
   getCurrentUserAsync,
   getCurrentPlanAsync,
+  getHouseholdNameAsync,
+  getHouseholdMonthSummary,
+  getHouseholdMonthSummaryAsync,
+  getHouseholdMonthTasksAsync,
+  HouseholdMonthTaskItem,
   getMonthKey,
   getMonthTasksAsync,
   getMyMonthTasks,
@@ -118,18 +126,31 @@ function computeStreak(tasks: Array<{ status: 'pending' | 'completed' | 'missed'
 
 export default function MyMonthScreen() {
   const insets = useSafeAreaInsets()
-  const params = useLocalSearchParams<{ memberId?: string, memberName?: string }>()
+  const { onMenuPress } = useMenuContext()
+  const params = useLocalSearchParams<{ memberId?: string, memberName?: string, mode?: string }>()
+  const canSwitchView = typeof params.memberId !== 'string'
+  const initialViewMode = canSwitchView && params.mode === 'household' ? 'household' : 'mine'
   const [monthOffset, setMonthOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [plan, setPlan] = useState(CURRENT_PLAN)
+  const [viewMode, setViewMode] = useState<'mine' | 'household'>(initialViewMode)
   const [tasks, setTasks] = useState(getMyMonthTasks(0, params.memberId))
+  const [householdName, setHouseholdName] = useState('')
+  const [householdSummary, setHouseholdSummary] = useState<Awaited<ReturnType<typeof getHouseholdMonthSummaryAsync>>>(getHouseholdMonthSummary(0))
+  const [householdMonthTasks, setHouseholdMonthTasks] = useState<HouseholdMonthTaskItem[]>([])
   const [currentUserName, setCurrentUserName] = useState('')
   const [historyStats, setHistoryStats] = useState<HistoryStat[]>([])
 
   const monthKey = useMemo(() => getMonthKey(monthOffset), [monthOffset])
   const monthLabel = useMemo(() => formatMonthLabel(monthKey), [monthKey])
   const memberId = typeof params.memberId === 'string' ? params.memberId : undefined
-  const memberName = typeof params.memberName === 'string' ? params.memberName : undefined
+  const memberName = typeof params.memberName === 'string' ? firstNameOnly(params.memberName, 'Usuario') : undefined
+
+  useEffect(() => {
+    if (!canSwitchView && viewMode !== 'mine') {
+      setViewMode('mine')
+    }
+  }, [canSwitchView, viewMode])
 
   useEffect(() => {
     let mounted = true
@@ -140,6 +161,10 @@ export default function MyMonthScreen() {
 
     getCurrentUserAsync().then(user => {
       if (mounted) setCurrentUserName(user.name)
+    })
+
+    getHouseholdNameAsync().then(name => {
+      if (mounted) setHouseholdName(name)
     })
 
     return () => {
@@ -153,8 +178,14 @@ export default function MyMonthScreen() {
     async function loadMonthTasks() {
       if (mounted) setLoading(true)
       try {
-        const nextTasks = await getMonthTasksAsync(monthOffset, memberId)
+        const [nextTasks, nextHouseholdSummary, nextHouseholdMonthTasks] = await Promise.all([
+          getMonthTasksAsync(monthOffset, memberId),
+          getHouseholdMonthSummaryAsync(monthOffset),
+          getHouseholdMonthTasksAsync(monthOffset),
+        ])
         if (mounted) setTasks(nextTasks)
+        if (mounted) setHouseholdSummary(nextHouseholdSummary)
+        if (mounted) setHouseholdMonthTasks(nextHouseholdMonthTasks)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -171,7 +202,15 @@ export default function MyMonthScreen() {
     const channel = supabase
       .channel('my-month-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_executions' }, () => {
-        getMonthTasksAsync(monthOffset, memberId).then(setTasks)
+        Promise.all([
+          getMonthTasksAsync(monthOffset, memberId),
+          getHouseholdMonthSummaryAsync(monthOffset),
+          getHouseholdMonthTasksAsync(monthOffset),
+        ]).then(([nextTasks, nextHouseholdSummary, nextHouseholdMonthTasks]) => {
+          setTasks(nextTasks)
+          setHouseholdSummary(nextHouseholdSummary)
+          setHouseholdMonthTasks(nextHouseholdMonthTasks)
+        })
       })
       .subscribe()
 
@@ -183,11 +222,22 @@ export default function MyMonthScreen() {
   const completed = tasks.filter(task => task.status === 'completed').length
   const pending = tasks.filter(task => task.status === 'pending').length
   const missed = tasks.filter(task => task.status === 'missed').length
+  const householdAssigned = householdSummary.totalAssigned
+  const householdCompleted = householdSummary.totalCompleted
+  const householdPending = householdMonthTasks.filter(task => task.status === 'pending').length
+  const householdMissed = householdMonthTasks.filter(task => task.status === 'missed').length
+  const householdMembers = householdSummary.byMember.length
+  const householdLagging = householdSummary.byMember.filter(item => item.assigned > 0 && item.completed === 0).length
   const progress = tasks.length === 0 ? 0 : Math.round((completed / tasks.length) * 100)
   const pendingRate = tasks.length === 0 ? 0 : Math.round((pending / tasks.length) * 100)
   const missedRate = tasks.length === 0 ? 0 : Math.round((missed / tasks.length) * 100)
   const consistency = tasks.length === 0 ? 0 : Math.round(((tasks.length - missed) / tasks.length) * 100)
   const streak = useMemo(() => computeStreak(tasks), [tasks])
+  const householdProgress = householdAssigned === 0 ? 0 : Math.round((householdCompleted / householdAssigned) * 100)
+  const householdPendingRate = householdAssigned === 0 ? 0 : Math.round((householdPending / householdAssigned) * 100)
+  const householdMissedRate = householdAssigned === 0 ? 0 : Math.round((householdMissed / householdAssigned) * 100)
+  const householdConsistency = householdAssigned === 0 ? 0 : Math.round(((householdAssigned - householdMissed) / householdAssigned) * 100)
+  const householdStreak = useMemo(() => computeStreak(householdMonthTasks), [householdMonthTasks])
   const previousMonthCompletion = historyStats[0]?.completion ?? 0
   const completionDelta = progress - previousMonthCompletion
 
@@ -240,6 +290,42 @@ export default function MyMonthScreen() {
         return a.taskName.localeCompare(b.taskName)
       })
   }, [tasks])
+
+  const householdTaskGroups = useMemo(() => {
+    const grouped = new Map<string, {
+      key: string
+      taskName: string
+      frequency: 'daily' | 'weekly' | 'monthly'
+      total: number
+      completed: number
+      pending: number
+      missed: number
+    }>()
+
+    for (const task of householdMonthTasks) {
+      const key = `${task.taskName}::${task.frequency}`
+      const current = grouped.get(key) ?? {
+        key,
+        taskName: task.taskName,
+        frequency: task.frequency,
+        total: 0,
+        completed: 0,
+        pending: 0,
+        missed: 0,
+      }
+
+      current.total += 1
+      if (task.status === 'completed') current.completed += 1
+      if (task.status === 'pending') current.pending += 1
+      if (task.status === 'missed') current.missed += 1
+      grouped.set(key, current)
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total
+      return a.taskName.localeCompare(b.taskName)
+    })
+  }, [householdMonthTasks])
 
   const canNavigateHistory = plan !== 'free'
 
@@ -296,6 +382,17 @@ export default function MyMonthScreen() {
     })
   }
 
+  const openHouseholdTaskDetail = (taskName: string, frequency: 'daily' | 'weekly' | 'monthly') => {
+    router.push({
+      pathname: '/(app)/(tabs)/household-task-month-detail',
+      params: {
+        monthOffset: String(monthOffset),
+        taskName,
+        frequency,
+      },
+    })
+  }
+
   const moveMonth = (direction: -1 | 1) => {
     if (!canNavigateHistory) {
       Alert.alert(
@@ -315,6 +412,9 @@ export default function MyMonthScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
+        <View style={styles.bgShapeTop} />
+        <View style={styles.bgShapeBottom} />
+
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
           <View style={styles.headerCard}>
             <Skeleton width={140} height={14} style={{ marginBottom: Spacing.sm }} />
@@ -340,135 +440,275 @@ export default function MyMonthScreen() {
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headerCard}>
+          <View style={styles.headerMenuRow}>
+            <HamburgerButton onPress={onMenuPress} />
+            <Text style={styles.eyebrow}>{viewMode === 'mine' ? 'Ritmo mensual' : 'Ritmo mensual del hogar'}</Text>
+          </View>
+
           <View style={styles.titleRow}>
             <View>
-              <Text style={styles.eyebrow}>Resumen mensual</Text>
-              <Text style={styles.title}>{memberName ?? currentUserName}</Text>
+              <Text style={styles.greeting}>{viewMode === 'mine' ? `Hola, ${memberName ?? currentUserName}` : `${householdName || 'Mi hogar'} · Mes`}</Text>
             </View>
 
             <View style={styles.headerActions}>
-              <View style={styles.progressBadge}>
-                <Text style={styles.progressBadgeValue}>{progress}%</Text>
-              </View>
+              <Pressable style={styles.planPill} onPress={() => goToPaywall('my-month-plan-pill')}>
+                <Text style={styles.planPillText}>
+                  {plan === 'hogar' ? 'Plan Hogar' : plan === 'familia' ? 'Plan Familia' : 'Plan Gratis'}
+                </Text>
+              </Pressable>
             </View>
           </View>
 
-          <Text style={styles.month}>{monthLabel}</Text>
+          <Text style={styles.month}>{viewMode === 'mine' ? monthLabel : householdSummary.monthKey}</Text>
 
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.progressText}>{completed} de {tasks.length} tareas completadas</Text>
-            <Pressable style={styles.historyPill} onPress={() => goToPaywall('my-month-history-pill')}>
-              <Text style={styles.historyPillText}>{canNavigateHistory ? 'Historial activo' : 'Historial bloqueado'}</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.fitnessCard}>
-          <View style={styles.fitnessHeaderRow}>
-            <Text style={styles.fitnessTitle}>Indicadores del mes</Text>
-            <Text style={styles.fitnessSubtitle}>{monthLabel}</Text>
-          </View>
-
-          <View style={styles.ringsRow}>
-            <View style={styles.ringItem}>
-              <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
-                <View style={styles.ringInner}>
-                  <Text style={styles.ringValue}>{progress}%</Text>
-                </View>
-              </View>
-              <Text style={styles.ringLabel}>Cumplidas</Text>
+          {canSwitchView && (
+            <View style={styles.viewSwitchRow}>
+              <Pressable
+                style={[styles.viewSwitchChip, viewMode === 'mine' && styles.viewSwitchChipActive]}
+                onPress={() => setViewMode('mine')}
+              >
+                <Text style={[styles.viewSwitchText, viewMode === 'mine' && styles.viewSwitchTextActive]}>USUARIO - MES</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.viewSwitchChip, viewMode === 'household' && styles.viewSwitchChipActive]}
+                onPress={() => setViewMode('household')}
+              >
+                <Text style={[styles.viewSwitchText, viewMode === 'household' && styles.viewSwitchTextActive]}>HOGAR - MES</Text>
+              </Pressable>
             </View>
-
-            <View style={styles.ringItem}>
-              <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
-                <View style={styles.ringInner}>
-                  <Text style={styles.ringValue}>{consistency}%</Text>
-                </View>
-              </View>
-              <Text style={styles.ringLabel}>Consistencia</Text>
-            </View>
-
-            <View style={styles.ringItem}>
-              <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
-                <View style={styles.ringInner}>
-                  <Text style={styles.ringValue}>{missedRate}%</Text>
-                </View>
-              </View>
-              <Text style={styles.ringLabel}>Vencidas</Text>
-            </View>
-          </View>
-
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <Text style={styles.kpiLabel}>Racha actual</Text>
-              <Text style={styles.kpiValue}>{streak} dias</Text>
-            </View>
-            <View style={styles.kpiItem}>
-              <Text style={styles.kpiLabel}>Pendientes</Text>
-              <Text style={styles.kpiValue}>{pendingRate}%</Text>
-            </View>
-            <View style={styles.kpiItem}>
-              <Text style={styles.kpiLabel}>Vs mes anterior</Text>
-              <Text style={[styles.kpiValue, completionDelta >= 0 ? styles.kpiPositive : styles.kpiNegative]}>
-                {completionDelta >= 0 ? '+' : ''}{completionDelta}%
-              </Text>
-            </View>
-          </View>
-
-          {canNavigateHistory ? (
-            <View style={styles.historyList}>
-              <Text style={styles.historyTitle}>Meses anteriores</Text>
-              {historyStats.map(item => (
-                <View key={item.offset} style={styles.historyRow}>
-                  <View style={styles.historyRowHeader}>
-                    <Text style={styles.historyMonth}>{item.label}</Text>
-                    <Text style={styles.historyPct}>{item.completion}%</Text>
-                  </View>
-                  <View style={styles.historyBarTrack}>
-                    <View style={[styles.historyBarFill, { width: `${item.completion}%` }]} />
-                  </View>
-                  <Text style={styles.historyMeta}>{item.total} tareas en total</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-locked-card')}>
-              <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
-              <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
-            </Pressable>
           )}
+
+          <View style={styles.quickStatsRow}>
+            {viewMode === 'mine' ? (
+              <>
+                <View style={[styles.quickStatChip, styles.quickStatChipAssigned]}>
+                  <Text style={styles.quickStatValue}>{tasks.length}</Text>
+                  <Text style={styles.quickStatLabel}>Asignadas</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipCompleted]}>
+                  <Text style={styles.quickStatValue}>{completed}</Text>
+                  <Text style={styles.quickStatLabel}>Listas</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipPending]}>
+                  <Text style={styles.quickStatValue}>{pending}</Text>
+                  <Text style={styles.quickStatLabel}>Pendientes</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.quickStatChip, styles.quickStatChipAssigned]}>
+                  <Text style={styles.quickStatValue}>{householdMembers}</Text>
+                  <Text style={styles.quickStatLabel}>Miembros</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipCompleted]}>
+                  <Text style={styles.quickStatValue}>{householdSummary.totalCompleted}/{householdSummary.totalAssigned}</Text>
+                  <Text style={styles.quickStatLabel}>Completadas</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipPending]}>
+                  <Text style={styles.quickStatValue}>{householdLagging}</Text>
+                  <Text style={styles.quickStatLabel}>En riesgo</Text>
+                </View>
+              </>
+            )}
+          </View>
         </View>
+
+        {viewMode === 'mine' ? (
+          <View style={styles.fitnessCard}>
+            <View style={styles.fitnessHeaderRow}>
+              <Text style={styles.fitnessTitle}>Indicadores del mes</Text>
+              <Text style={styles.fitnessSubtitle}>{monthLabel}</Text>
+            </View>
+
+            <View style={styles.ringsRow}>
+              <View style={styles.ringItem}>
+                <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
+                  <View style={styles.ringInner}>
+                    <Text style={styles.ringValue}>{progress}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.ringLabel}>Cumplidas</Text>
+              </View>
+
+              <View style={styles.ringItem}>
+                <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
+                  <View style={styles.ringInner}>
+                    <Text style={styles.ringValue}>{consistency}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.ringLabel}>Consistencia</Text>
+              </View>
+
+              <View style={styles.ringItem}>
+                <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
+                  <View style={styles.ringInner}>
+                    <Text style={styles.ringValue}>{missedRate}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.ringLabel}>Vencidas</Text>
+              </View>
+            </View>
+
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <Text style={styles.kpiLabel}>Racha actual</Text>
+                <Text style={styles.kpiValue}>{streak} dias</Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={styles.kpiLabel}>Pendientes</Text>
+                <Text style={styles.kpiValue}>{pendingRate}%</Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={styles.kpiLabel}>Vs mes anterior</Text>
+                <Text style={[styles.kpiValue, completionDelta >= 0 ? styles.kpiPositive : styles.kpiNegative]}>
+                  {completionDelta >= 0 ? '+' : ''}{completionDelta}%
+                </Text>
+              </View>
+            </View>
+
+            {canNavigateHistory ? (
+              <View style={styles.historyList}>
+                <Text style={styles.historyTitle}>Meses anteriores</Text>
+                {historyStats.map(item => (
+                  <View key={item.offset} style={styles.historyRow}>
+                    <View style={styles.historyRowHeader}>
+                      <Text style={styles.historyMonth}>{item.label}</Text>
+                      <Text style={styles.historyPct}>{item.completion}%</Text>
+                    </View>
+                    <View style={styles.historyBarTrack}>
+                      <View style={[styles.historyBarFill, { width: `${item.completion}%` }]} />
+                    </View>
+                    <Text style={styles.historyMeta}>{item.total} tareas en total</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-locked-card')}>
+                <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
+                <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          <View style={styles.fitnessCard}>
+            <View style={styles.fitnessHeaderRow}>
+              <Text style={styles.fitnessTitle}>Indicadores del hogar</Text>
+              <Text style={styles.fitnessSubtitle}>{monthLabel}</Text>
+            </View>
+
+            <View style={styles.ringsRow}>
+              <View style={styles.ringItem}>
+                <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
+                  <View style={styles.ringInner}>
+                    <Text style={styles.ringValue}>{householdProgress}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.ringLabel}>Cumplidas</Text>
+              </View>
+
+              <View style={styles.ringItem}>
+                <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
+                  <View style={styles.ringInner}>
+                    <Text style={styles.ringValue}>{householdConsistency}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.ringLabel}>Consistencia</Text>
+              </View>
+
+              <View style={styles.ringItem}>
+                <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
+                  <View style={styles.ringInner}>
+                    <Text style={styles.ringValue}>{householdMissedRate}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.ringLabel}>Vencidas</Text>
+              </View>
+            </View>
+
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <Text style={styles.kpiLabel}>Racha hogar</Text>
+                <Text style={styles.kpiValue}>{householdStreak} dias</Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={styles.kpiLabel}>Pendientes</Text>
+                <Text style={styles.kpiValue}>{householdPendingRate}%</Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={styles.kpiLabel}>Miembros en riesgo</Text>
+                <Text style={styles.kpiValue}>{householdLagging}</Text>
+              </View>
+            </View>
+
+            {!canNavigateHistory && (
+              <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-household-locked-card')}>
+                <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
+                <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
 
         <View style={styles.listCard}>
-          <Text style={styles.sectionTitle}>Tareas del mes (resumen)</Text>
+          <Text style={styles.sectionTitle}>{viewMode === 'mine' ? 'Tareas del mes (resumen)' : 'Tareas del hogar (resumen)'}</Text>
 
-          {taskGroups.length === 0 ? (
-            <Text style={styles.emptyText}>No hay tareas para este mes.</Text>
+          {viewMode === 'mine' ? (
+            taskGroups.length === 0 ? (
+              <Text style={styles.emptyText}>No hay tareas para este mes.</Text>
+            ) : (
+              <View style={styles.groupList}>
+                {taskGroups.map(group => {
+                  const completionPct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
+                  return (
+                    <Pressable
+                      key={group.key}
+                      style={styles.groupRow}
+                      onPress={() => openTaskDetail(group.taskName, group.frequency)}
+                    >
+                      <View style={styles.groupMain}>
+                        <Text style={styles.groupTaskName}>{group.taskName}</Text>
+                        <Text style={styles.groupMeta}>
+                          {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {completionPct}%
+                        </Text>
+                      </View>
+                      <Text style={styles.groupDetailCta}>Abrir detalle</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            )
           ) : (
-            <View style={styles.groupList}>
-              {taskGroups.map(group => {
-                const completionPct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
-                return (
-                  <Pressable
-                    key={group.key}
-                    style={styles.groupRow}
-                    onPress={() => openTaskDetail(group.taskName, group.frequency)}
-                  >
-                    <View style={styles.groupMain}>
-                      <Text style={styles.groupTaskName}>{group.taskName}</Text>
-                      <Text style={styles.groupMeta}>
-                        {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {completionPct}%
-                      </Text>
-                    </View>
-                    <Text style={styles.groupDetailCta}>Abrir detalle</Text>
-                  </Pressable>
-                )
-              })}
-            </View>
+            householdTaskGroups.length === 0 ? (
+              <Text style={styles.emptyText}>No hay tareas asignadas para este mes.</Text>
+            ) : (
+              <View style={styles.groupList}>
+                {householdTaskGroups.map(group => {
+                  const pct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
+                  return (
+                    <Pressable key={group.key} style={styles.groupRow} onPress={() => openHouseholdTaskDetail(group.taskName, group.frequency)}>
+                      <View style={styles.groupMain}>
+                        <Text style={styles.groupTaskName}>{group.taskName}</Text>
+                        <Text style={styles.groupMeta}>
+                          {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {pct}%
+                        </Text>
+                        <View style={styles.groupStatusRow}>
+                          <View style={[styles.statusChip, styles.statusChipPending]}>
+                            <Text style={styles.statusChipTextPending}>Pend {group.pending}</Text>
+                          </View>
+                          <View style={[styles.statusChip, styles.statusChipDone]}>
+                            <Text style={styles.statusChipTextDone}>Comp {group.completed}</Text>
+                          </View>
+                          <View style={[styles.statusChip, styles.statusChipMissed]}>
+                            <Text style={styles.statusChipTextMissed}>Venc {group.missed}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <Text style={styles.groupDetailCta}>Abrir detalle</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            )
           )}
         </View>
 
@@ -506,30 +746,35 @@ const styles = StyleSheet.create({
   },
   bgShapeTop: {
     position: 'absolute',
-    top: -65,
-    left: -75,
+    top: -70,
+    right: -55,
     width: 220,
     height: 220,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#FFE8D2',
   },
   bgShapeBottom: {
     position: 'absolute',
-    bottom: 70,
-    right: -85,
-    width: 260,
-    height: 260,
+    bottom: 95,
+    left: -80,
+    width: 240,
+    height: 240,
     borderRadius: BorderRadius.full,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#FBE4CC',
   },
   headerCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: '#4A2F1E',
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#8A5A3B',
     padding: Spacing.lg,
     gap: Spacing.sm,
-    ...CARD_SHADOW_STYLE,
+    ...ShadowPresets.card,
+  },
+  headerMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
@@ -540,13 +785,58 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: Spacing.xs,
   },
-  eyebrow: {
+  viewSwitchRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  viewSwitchChip: {
+    flex: 1,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 211, 178, 0.35)',
+    backgroundColor: 'rgba(244, 211, 178, 0.08)',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  viewSwitchChipActive: {
+    backgroundColor: 'rgba(214, 139, 69, 0.24)',
+    borderColor: 'rgba(214, 139, 69, 0.5)',
+  },
+  viewSwitchText: {
+    color: '#F4D3B2',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: Colors.text.secondary,
-    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
+  viewSwitchTextActive: {
+    color: '#FFF7EF',
+  },
+  eyebrow: {
+    color: '#F4D3B2',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  greeting: {
+    color: '#FFF7EF',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  planPill: {
+    backgroundColor: 'rgba(244, 211, 178, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(244, 211, 178, 0.4)',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 6,
+  },
+  planPillText: {
+    color: '#FFF2E6',
+    fontSize: 12,
+    fontWeight: '700',
   },
   title: {
     fontSize: 24,
@@ -566,43 +856,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.primary,
   },
-  progressText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text.primary,
-  },
   month: {
     textTransform: 'capitalize',
-    color: Colors.text.secondary,
+    color: '#E9C4A0',
     fontSize: 14,
-  },
-  summaryRow: {
-    marginTop: Spacing.xs,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  historyPill: {
-    borderRadius: BorderRadius.full,
-    backgroundColor: '#F9E9D9',
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 6,
-  },
-  historyPillText: {
-    color: '#8A4C1B',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: BorderRadius.full,
-    backgroundColor: '#E5E7EB',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
   },
   listCard: {
     backgroundColor: Colors.surface,
@@ -770,8 +1027,47 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.text.primary,
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '700',
+  },
+  quickStatsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  quickStatChip: {
+    flex: 1,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm + 2,
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    gap: 2,
+  },
+  quickStatChipAssigned: {
+    backgroundColor: 'rgba(214, 139, 69, 0.15)',
+    borderColor: 'rgba(214, 139, 69, 0.32)',
+  },
+  quickStatChipCompleted: {
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderColor: 'rgba(34, 197, 94, 0.25)',
+  },
+  quickStatChipPending: {
+    backgroundColor: 'rgba(197, 123, 42, 0.16)',
+    borderColor: 'rgba(197, 123, 42, 0.35)',
+  },
+  quickStatValue: {
+    color: '#FFF7EF',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  quickStatLabel: {
+    color: '#E9C4A0',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   emptyText: {
     color: Colors.text.secondary,

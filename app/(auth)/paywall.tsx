@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated, Easing, Pressable, ScrollView,
   StyleSheet, Text, View, ActivityIndicator, Alert, Image,
@@ -7,6 +7,8 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { BorderRadius, Spacing } from '../../constants/theme'
 import { supabase } from '../../lib/supabase'
+import { getCurrentOwnedPlanAsync } from '../../lib/dashboard'
+import { SubscriptionPlan } from '../../types'
 
 const PLANS = [
   {
@@ -44,15 +46,49 @@ const PLANS = [
 ]
 
 export default function PaywallScreen() {
-  const { email } = useLocalSearchParams<{ email?: string }>()
-  const [selectedPlan, setSelectedPlan] = useState('hogar')
+  const { email, entry, source } = useLocalSearchParams<{ email?: string; entry?: 'manage' | 'onboarding'; source?: string }>()
+  const paywallEntry = entry === 'onboarding' ? 'onboarding' : 'manage'
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('hogar')
   const [loading, setLoading]           = useState(false)
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null)
   const [accountEmail, setAccountEmail] = useState<string | null>(email ?? null)
   const [resending, setResending] = useState(false)
   const [refreshingVerification, setRefreshingVerification] = useState(false)
+  const [ownedPlan, setOwnedPlan] = useState<SubscriptionPlan>('free')
+  const [checkingPlan, setCheckingPlan] = useState(true)
 
   const reveal   = useRef(new Animated.Value(0)).current
+
+  const planLabel = useMemo(() => {
+    if (ownedPlan === 'hogar') return 'Hogar'
+    if (ownedPlan === 'familia') return 'Familia'
+    return 'Gratis'
+  }, [ownedPlan])
+
+  const introCopy = useMemo(() => {
+    if (paywallEntry === 'onboarding') {
+      return {
+        eyebrow: 'MeToca · Tu plan',
+        headline: 'Empieza gratis y mejora cuando quieras.',
+        subline: 'Tu cuenta ya está lista. Puedes entrar gratis ahora y cambiar de plan cuando tu hogar realmente lo necesite.',
+      }
+    }
+
+    return {
+      eyebrow: 'MeToca · Membresía',
+      headline: 'Elige el plan que le calza a tu hogar.',
+      subline: 'Revisa tus límites actuales y cambia de plan solo cuando te haga falta más capacidad o funciones.',
+    }
+  }, [paywallEntry])
+
+  const sourceLabel = useMemo(() => {
+    if (!source) return null
+    if (source.includes('profile')) return 'perfil'
+    if (source.includes('settings')) return 'configuración'
+    if (source.includes('household')) return 'mi hogar'
+    if (source.includes('today')) return 'hoy'
+    return 'la app'
+  }, [source])
 
   useEffect(() => {
     Animated.timing(reveal, {
@@ -90,14 +126,26 @@ export default function PaywallScreen() {
     let mounted = true
 
     async function refreshVerificationState() {
-      const result = await readVerificationState()
+      const [result, nextOwnedPlan] = await Promise.all([
+        readVerificationState(),
+        getCurrentOwnedPlanAsync().catch(() => 'free' as SubscriptionPlan),
+      ])
+
       if (!mounted) return
+
+      setOwnedPlan(nextOwnedPlan)
+      setCheckingPlan(false)
+
       if (result.user) {
         setAccountEmail(result.resolvedEmail)
         setEmailVerified(result.confirmed)
       } else {
         setAccountEmail(result.resolvedEmail)
         setEmailVerified(false)
+      }
+
+      if (paywallEntry === 'onboarding' && nextOwnedPlan !== 'free') {
+        router.replace('/(app)/(tabs)/today')
       }
     }
 
@@ -112,13 +160,24 @@ export default function PaywallScreen() {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [email])
+  }, [email, paywallEntry])
 
   useEffect(() => {
     if (emailVerified === false && selectedPlan !== 'free') {
       setSelectedPlan('free')
     }
   }, [emailVerified, selectedPlan])
+
+  useEffect(() => {
+    if (ownedPlan !== 'free') {
+      setSelectedPlan(ownedPlan)
+      return
+    }
+
+    if (paywallEntry === 'onboarding') {
+      setSelectedPlan('free')
+    }
+  }, [ownedPlan, paywallEntry])
 
   const handleResendVerification = async () => {
     if (!accountEmail) {
@@ -183,6 +242,11 @@ export default function PaywallScreen() {
     const plan = PLANS.find(p => p.id === selectedPlan)
     if (!plan) return
 
+    if (ownedPlan !== 'free' && plan.id === ownedPlan) {
+      router.replace('/(app)/(tabs)/today')
+      return
+    }
+
     if (plan.id !== 'free' && emailVerified === false) {
       Alert.alert(
         'Confirma tu correo primero',
@@ -219,6 +283,15 @@ export default function PaywallScreen() {
   const hogarPlan = PLANS[1]
   const altPlans  = [PLANS[0], PLANS[2]]
 
+  if (checkingPlan) {
+    return (
+      <View style={styles.loadingRoot}>
+        <StatusBar style="dark" />
+        <ActivityIndicator color="#8A5A3B" />
+      </View>
+    )
+  }
+
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
@@ -242,14 +315,21 @@ export default function PaywallScreen() {
           {/* Eyebrow */}
           <View style={styles.eyebrowRow}>
             <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrow}>MeToca · Tu hogar</Text>
+            <Text style={styles.eyebrow}>{introCopy.eyebrow}</Text>
           </View>
 
           {/* Headline aspiracional */}
-          <Text style={styles.headline}>{'Tu hogar,\ntu paz.'}</Text>
-          <Text style={styles.subline}>
-            Cuando la carga se reparte sola, todo cambia dentro del hogar.
-          </Text>
+          <Text style={styles.headline}>{introCopy.headline}</Text>
+          <Text style={styles.subline}>{introCopy.subline}</Text>
+
+          {ownedPlan !== 'free' && (
+            <View style={styles.currentPlanBox}>
+              <Text style={styles.currentPlanTitle}>Tu cuenta ya tiene plan {planLabel}</Text>
+              <Text style={styles.currentPlanText}>
+                No necesitas volver a pasar por aquí para usar la app. Esta pantalla queda como referencia para comparar planes cuando tú quieras.
+              </Text>
+            </View>
+          )}
 
           {emailVerified === false && (
             <View style={styles.verifyBox}>
@@ -343,31 +423,33 @@ export default function PaywallScreen() {
               style={({ pressed }) => [
                 styles.primaryBtn,
                 pressed && { opacity: 0.86 },
-                loading && styles.primaryBtnDisabled,
+                (loading || (ownedPlan !== 'free' && selectedPlan === ownedPlan)) && styles.primaryBtnDisabled,
               ]}
               onPress={handleSubscribe}
-              disabled={loading}
+              disabled={loading || (ownedPlan !== 'free' && selectedPlan === ownedPlan)}
             >
               {loading
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={styles.primaryBtnText}>
-                    {selectedPlan === 'free'
+                    {ownedPlan !== 'free' && selectedPlan === ownedPlan
+                      ? 'Ya tienes este plan'
+                      : selectedPlan === 'free'
                       ? 'Empezar sin costo →'
                       : 'Quiero esto para mi hogar →'}
                   </Text>
               }
             </Pressable>
 
-            {selectedPlan !== 'free' && (
+            {(selectedPlan !== 'free' || paywallEntry === 'onboarding') && (
               <Pressable
                 style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.6 }]}
                 onPress={() => router.replace('/(app)/(tabs)/today')}
               >
-                <Text style={styles.ghostBtnText}>Empezar sin costo</Text>
+                <Text style={styles.ghostBtnText}>{paywallEntry === 'onboarding' ? 'Entrar a la app' : 'Seguir con plan gratis'}</Text>
               </Pressable>
             )}
 
-            <Text style={styles.riskText}>Sin compromiso · Cancela cuando quieras</Text>
+            <Text style={styles.riskText}>{sourceLabel ? `Abierto desde ${sourceLabel} · ` : ''}Sin compromiso · Cancela cuando quieras</Text>
 
             <Text style={styles.legalText}>
               Precios en CLP. Se renueva automáticamente. Cancela desde la tienda de apps.
@@ -390,6 +472,12 @@ export default function PaywallScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF8EE',
+  },
   root: {
     flex: 1,
     backgroundColor: '#FFF8EE',
@@ -443,6 +531,24 @@ const styles = StyleSheet.create({
     color: '#57534E',
     lineHeight: 23,
     marginBottom: Spacing.xs,
+  },
+  currentPlanBox: {
+    backgroundColor: '#FFF4E4',
+    borderWidth: 1,
+    borderColor: '#E8C99E',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  currentPlanTitle: {
+    color: '#8A4C1B',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  currentPlanText: {
+    color: '#6A4A2D',
+    fontSize: 13,
+    lineHeight: 19,
   },
   verifyBox: {
     backgroundColor: '#FFF8EE',

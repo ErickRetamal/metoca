@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 
 interface MenuContextType {
   onMenuPress: () => void
+  canManageTasks: boolean
 }
 
 export const MenuContext = createContext<MenuContextType | null>(null)

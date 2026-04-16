@@ -31,10 +31,8 @@ metoca/
 │   │   └── paywall.tsx
 │   └── (app)/
 │       └── (tabs)/             # Navegación principal (bottom tab bar)
-│           ├── today.tsx           # Hoy — Individual Diaria
-│           ├── my-month.tsx        # Mi mes — Individual Mensual
-│           ├── household-today.tsx # Hogar hoy — Grupal Diaria
-│           └── household-month.tsx # Hogar mes — Grupal Mensual
+│           ├── today.tsx           # Hoy (Mi día / Hogar) — Vista unificada
+│           └── my-month.tsx        # Mes (Usuario / Hogar) — Vista unificada
 │
 ├── components/                 # Componentes reutilizables
 │   ├── ui/                     # Componentes base (botones, inputs, cards)

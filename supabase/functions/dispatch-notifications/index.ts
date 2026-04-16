@@ -72,12 +72,72 @@ async function markFailed(ids: string[]): Promise<void> {
   }
 }
 
-async function sendNotification(_row: OutboxRow): Promise<void> {
-  // Placeholder transport:
-  // - channel='push': integrate Expo push gateway here.
-  // - channel='email': integrate transactional email provider here.
-  // For now, successful execution marks queued items as sent.
-  return
+async function fetchUserPushToken(userId: string): Promise<string | null> {
+  const response = await supabaseFetch(
+    `/rest/v1/users?id=eq.${userId}&select=push_token_apns,push_token_fcm&limit=1`,
+    { method: 'GET' }
+  )
+  if (!response.ok) return null
+
+  const rows = await response.json() as Array<{ push_token_apns: string | null; push_token_fcm: string | null }>
+  const row = rows[0]
+  if (!row) return null
+
+  return row.push_token_apns ?? row.push_token_fcm ?? null
+}
+
+function buildPushMessage(row: OutboxRow): { title: string; body: string } {
+  const payload = row.payload as Record<string, unknown>
+
+  if (row.event_type === 'grace_started') {
+    const graceDate = typeof payload.grace_ends_at === 'string'
+      ? new Date(payload.grace_ends_at).toLocaleDateString('es-CL')
+      : 'pronto'
+    return {
+      title: 'Tu hogar tiene más miembros de los permitidos',
+      body: `Tu plan permite ${payload.max_members} miembros, pero tienes ${payload.active_members}. Actualiza antes del ${graceDate} para evitar que se eliminen miembro(s).`,
+    }
+  }
+
+  if (row.event_type === 'enforced') {
+    return {
+      title: 'Período de gracia vencido',
+      body: `Se han eliminado ${payload.members_to_remove ?? 'algunos'} miembro(s) de tu hogar por exceder la capacidad del plan.`,
+    }
+  }
+
+  return { title: 'Aviso sobre tu hogar', body: 'Revisa el estado de tu hogar en la app.' }
+}
+
+async function sendPushViaExpo(token: string, title: string, body: string): Promise<void> {
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ to: token, title, body, sound: 'default' }),
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`Expo push request failed: ${detail}`)
+  }
+
+  const result = await response.json() as { data?: { status?: string; message?: string } }
+  if (result.data?.status === 'error') {
+    throw new Error(`Expo push error: ${result.data.message ?? 'unknown'}`)
+  }
+}
+
+async function sendNotification(row: OutboxRow): Promise<void> {
+  if (row.channel !== 'push') {
+    // Email and other channels: not yet implemented.
+    return
+  }
+
+  const token = await fetchUserPushToken(row.user_id)
+  if (!token) return // No push token registered – skip silently.
+
+  const { title, body } = buildPushMessage(row)
+  await sendPushViaExpo(token, title, body)
 }
 
 serve(async (request) => {

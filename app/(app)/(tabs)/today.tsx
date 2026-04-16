@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { Colors, Spacing, BorderRadius, ShadowPresets } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
 import { Skeleton } from '../../../components/ui/skeleton'
@@ -14,11 +14,17 @@ import {
   getCurrentDate,
   getCurrentUser,
   getCurrentUserAsync,
+  getHouseholdNameAsync,
+  getHouseholdTodaySummary,
+  getHouseholdTodaySummaryAsync,
+  getHouseholdTomorrowSummaryAsync,
   getMyTodayTasks,
   getMyTodayTasksAsync,
   getMyTomorrowTasksAsync,
   markTaskAsCompletedAsync,
+  getPlanGuardStatusAsync,
   DashboardTaskExecution,
+  PlanGuardStatus,
 } from '../../../lib/dashboard'
 
 function formatLongDate(date: Date): string {
@@ -47,14 +53,27 @@ function getStatusLabel(status: 'pending' | 'completed' | 'missed'): string {
   return 'Pendiente'
 }
 
+function shouldShowAlert(completed: number, assigned: number): boolean {
+  const hour = getCurrentDate().getHours()
+  return hour >= 17 && assigned > 0 && completed === 0
+}
+
 export default function TodayScreen() {
+  const params = useLocalSearchParams<{ mode?: string }>()
+  const initialViewMode = params.mode === 'household' ? 'household' : 'mine'
   const [tasks, setTasks] = useState(getMyTodayTasks())
+  const [householdRows, setHouseholdRows] = useState<Awaited<ReturnType<typeof getHouseholdTodaySummaryAsync>>>(getHouseholdTodaySummary())
+  const [householdTomorrowRows, setHouseholdTomorrowRows] = useState<Awaited<ReturnType<typeof getHouseholdTomorrowSummaryAsync>>>([])
+  const [householdName, setHouseholdName] = useState('')
   const [tomorrowTasks, setTomorrowTasks] = useState<DashboardTaskExecution[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<'mine' | 'household'>(initialViewMode)
+  const [expandedHouseholdMemberId, setExpandedHouseholdMemberId] = useState<string | null>(null)
   const [currentPlan, setCurrentPlan] = useState(CURRENT_PLAN)
   const [currentUserName, setCurrentUserName] = useState(getCurrentUser().name)
   const [taskActionFeedback, setTaskActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null)
+  const [planGuardNotice, setPlanGuardNotice] = useState<PlanGuardStatus | null>(null)
   const { onMenuPress } = useMenuContext()
 
   const formattedDate = useMemo(() => formatLongDate(getCurrentDate()), [])
@@ -64,18 +83,26 @@ export default function TodayScreen() {
 
     async function loadToday() {
       try {
-        const [plan, user, todayTasks, tomorrowTasksData] = await Promise.all([
+        const [plan, user, todayTasks, tomorrowTasksData, guardStatus, summaryRows, summaryTomorrowRows, nextHouseholdName] = await Promise.all([
           getCurrentPlanAsync(),
           getCurrentUserAsync(),
           getMyTodayTasksAsync(),
           getMyTomorrowTasksAsync(),
+          getPlanGuardStatusAsync(),
+          getHouseholdTodaySummaryAsync(),
+          getHouseholdTomorrowSummaryAsync(),
+          getHouseholdNameAsync(),
         ])
 
         if (!mounted) return
         setCurrentPlan(plan)
         setCurrentUserName(user.name)
         setTasks(todayTasks)
+        setHouseholdRows(summaryRows)
+        setHouseholdTomorrowRows(summaryTomorrowRows)
+        setHouseholdName(nextHouseholdName)
         setTomorrowTasks(tomorrowTasksData)
+        setPlanGuardNotice(guardStatus)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -92,7 +119,15 @@ export default function TodayScreen() {
     const channel = supabase
       .channel('today-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_executions' }, () => {
-        getMyTodayTasksAsync().then(setTasks)
+        Promise.all([
+          getMyTodayTasksAsync(),
+          getHouseholdTodaySummaryAsync(),
+          getHouseholdTomorrowSummaryAsync(),
+        ]).then(([nextTasks, summaryRows, summaryTomorrowRows]) => {
+          setTasks(nextTasks)
+          setHouseholdRows(summaryRows)
+          setHouseholdTomorrowRows(summaryTomorrowRows)
+        })
       })
       .subscribe()
 
@@ -139,7 +174,11 @@ export default function TodayScreen() {
   }
 
   const completedCount = tasks.filter(task => task.status === 'completed').length
-  const progress = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100)
+  const pendingCount = Math.max(tasks.length - completedCount, 0)
+  const totalAssigned = householdRows.reduce((acc, row) => acc + row.assigned, 0)
+  const totalCompleted = householdRows.reduce((acc, row) => acc + row.completed, 0)
+  const laggingCount = householdRows.filter(row => shouldShowAlert(row.completed, row.assigned)).length
+  const householdTomorrowWithTasks = householdTomorrowRows.filter(row => row.assigned > 0)
 
   const handleTaskPress = async (taskId: string, status: 'pending' | 'completed' | 'missed', taskName: string) => {
     if (status !== 'pending' || completingTaskId) return
@@ -174,10 +213,10 @@ export default function TodayScreen() {
         <View style={styles.headerCard}>
           <View style={styles.headerMenuRow}>
             <HamburgerButton onPress={onMenuPress} />
-            <Text style={styles.eyebrow}>Tu ritmo de hoy</Text>
+            <Text style={styles.eyebrow}>{viewMode === 'mine' ? 'Tu ritmo de hoy' : 'Ritmo del hogar'}</Text>
           </View>
           <View style={styles.headerTopRow}>
-            <Text style={styles.greeting}>Hola, {currentUserName}</Text>
+            <Text style={styles.greeting}>{viewMode === 'mine' ? `Hola, ${currentUserName}` : `${householdName || 'Mi hogar'} · Hoy`}</Text>
             <View style={styles.headerActions}>
               <Pressable style={styles.planPill} onPress={() => goToPaywall('today-plan-pill')}>
                 <Text style={styles.planPillText}>
@@ -189,97 +228,185 @@ export default function TodayScreen() {
 
           <Text style={styles.date}>{formattedDate}</Text>
 
-          <View style={styles.metricsRow}>
-            <View>
-              <Text style={styles.counter}>{tasks.length} tareas hoy</Text>
-              <Text style={styles.progress}>{completedCount}/{tasks.length} completadas</Text>
-            </View>
-            <View style={styles.progressBadge}>
-              <Text style={styles.progressBadgeText}>{progress}%</Text>
-            </View>
-          </View>
-
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+          <View style={styles.viewSwitchRow}>
+            <Pressable
+              style={[styles.viewSwitchChip, viewMode === 'mine' && styles.viewSwitchChipActive]}
+              onPress={() => setViewMode('mine')}
+            >
+              <Text style={[styles.viewSwitchText, viewMode === 'mine' && styles.viewSwitchTextActive]}>Mi día</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.viewSwitchChip, viewMode === 'household' && styles.viewSwitchChipActive]}
+              onPress={() => setViewMode('household')}
+            >
+              <Text style={[styles.viewSwitchText, viewMode === 'household' && styles.viewSwitchTextActive]}>Hogar</Text>
+            </Pressable>
           </View>
 
           <View style={styles.quickStatsRow}>
-            <View style={[styles.quickStatChip, styles.quickStatChipAssigned]}>
-              <Text style={styles.quickStatValue}>{tasks.length}</Text>
-              <Text style={styles.quickStatLabel}>Asignadas</Text>
-            </View>
-            <View style={[styles.quickStatChip, styles.quickStatChipCompleted]}>
-              <Text style={styles.quickStatValue}>{completedCount}</Text>
-              <Text style={styles.quickStatLabel}>Listas</Text>
-            </View>
-            <View style={[styles.quickStatChip, styles.quickStatChipPending]}>
-              <Text style={styles.quickStatValue}>{Math.max(tasks.length - completedCount, 0)}</Text>
-              <Text style={styles.quickStatLabel}>Pendientes</Text>
-            </View>
+            {viewMode === 'mine' ? (
+              <>
+                <View style={[styles.quickStatChip, styles.quickStatChipAssigned]}>
+                  <Text style={styles.quickStatValue}>{tasks.length}</Text>
+                  <Text style={styles.quickStatLabel}>Asignadas</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipCompleted]}>
+                  <Text style={styles.quickStatValue}>{completedCount}</Text>
+                  <Text style={styles.quickStatLabel}>Listas</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipPending]}>
+                  <Text style={styles.quickStatValue}>{pendingCount}</Text>
+                  <Text style={styles.quickStatLabel}>Pendientes</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.quickStatChip, styles.quickStatChipAssigned]}>
+                  <Text style={styles.quickStatValue}>{householdRows.length}</Text>
+                  <Text style={styles.quickStatLabel}>Miembros</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipCompleted]}>
+                  <Text style={styles.quickStatValue}>{totalCompleted}/{totalAssigned}</Text>
+                  <Text style={styles.quickStatLabel}>Completadas</Text>
+                </View>
+                <View style={[styles.quickStatChip, styles.quickStatChipPending]}>
+                  <Text style={styles.quickStatValue}>{laggingCount}</Text>
+                  <Text style={styles.quickStatLabel}>En riesgo</Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
         </Reveal>
 
+        {planGuardNotice?.overCapacity && (
+          <Reveal delay={60}>
+            <View style={styles.guardBanner}>
+              <Text style={styles.guardBannerTitle}>Cambio de plan detectado</Text>
+              <Text style={styles.guardBannerText}>
+                Tu hogar tiene {planGuardNotice.activeMembers} miembros pero el plan actual permite {planGuardNotice.maxMembers}.
+                {planGuardNotice.graceEndsAt
+                  ? ` Tienes hasta el ${new Date(planGuardNotice.graceEndsAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })} para actualizar.`
+                  : ''}
+              </Text>
+              <Pressable style={styles.guardBannerButton} onPress={() => goToPaywall('today-plan-guard-banner')}>
+                <Text style={styles.guardBannerButtonText}>Actualizar plan</Text>
+              </Pressable>
+            </View>
+          </Reveal>
+        )}
+
         <Reveal delay={90}>
         <View style={styles.listCard}>
-          <Text style={styles.sectionTitle}>Agenda del dia</Text>
+          {viewMode === 'mine' ? (
+            <>
+              <Text style={styles.sectionTitle}>{`${currentUserName.toUpperCase()} - DIA`}</Text>
 
-          {taskActionFeedback && (
-            <View style={[
-              styles.feedbackBox,
-              taskActionFeedback.type === 'success' ? styles.feedbackSuccessBox : styles.feedbackErrorBox,
-            ]}>
-              <Text style={[
-                styles.feedbackText,
-                taskActionFeedback.type === 'success' ? styles.feedbackSuccessText : styles.feedbackErrorText,
-              ]}>{taskActionFeedback.message}</Text>
-            </View>
-          )}
-
-          {tasks.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
-              <Text style={styles.emptyStateIcon}>📭</Text>
-              <Text style={styles.emptyStateTitle}>Sin tareas hoy</Text>
-              <Text style={styles.emptyStateText}>¡Impresionante! No tienes tareas asignadas para hoy.</Text>
-              <Text style={styles.emptyStateSubtext}>Usa "Solicitar intercambio" si necesitas tomar una tarea de otro miembro.</Text>
-            </View>
-          ) : (
-            tasks.map(task => (
-              <View
-                key={task.id}
-                style={[styles.taskRow, task.status === 'completed' && styles.taskRowCompleted]}
-              >
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(task.status) }]} />
-
-                <View style={styles.taskNameContainer}>
-                  <Text style={styles.taskName}>{task.taskName}</Text>
-                  <Text style={styles.taskStatusLabel}>{getStatusLabel(task.status)}</Text>
+              {taskActionFeedback && (
+                <View style={[
+                  styles.feedbackBox,
+                  taskActionFeedback.type === 'success' ? styles.feedbackSuccessBox : styles.feedbackErrorBox,
+                ]}>
+                  <Text style={[
+                    styles.feedbackText,
+                    taskActionFeedback.type === 'success' ? styles.feedbackSuccessText : styles.feedbackErrorText,
+                  ]}>{taskActionFeedback.message}</Text>
                 </View>
+              )}
 
-                <View style={styles.rightMeta}>
-                  <Text style={[styles.status, { color: getStatusColor(task.status) }]}>{getStatusSymbol(task.status)}</Text>
-                  <Text style={styles.taskTime}>{task.scheduledTime}</Text>
+              {tasks.length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyStateIcon}>📭</Text>
+                  <Text style={styles.emptyStateTitle}>Sin tareas hoy</Text>
+                  <Text style={styles.emptyStateText}>¡Impresionante! No tienes tareas asignadas para hoy.</Text>
+                  <Text style={styles.emptyStateSubtext}>Usa "Solicitar intercambio" si necesitas tomar una tarea de otro miembro.</Text>
                 </View>
-
-                {task.status === 'pending' && (
-                  <Pressable
-                    style={[styles.completeButton, completingTaskId === task.id && styles.completeButtonDisabled]}
-                    onPress={() => handleTaskPress(task.id, task.status, task.taskName)}
-                    disabled={completingTaskId === task.id}
+              ) : (
+                tasks.map(task => (
+                  <View
+                    key={task.id}
+                    style={[styles.taskRow, task.status === 'completed' && styles.taskRowCompleted]}
                   >
-                    <Text style={styles.completeButtonText}>{completingTaskId === task.id ? 'Guardando...' : 'Realizada'}</Text>
-                  </Pressable>
-                )}
-              </View>
-            ))
+                    <View style={styles.taskRowContent}>
+                      <View style={[styles.statusDot, { backgroundColor: getStatusColor(task.status) }]} />
+                      <View style={styles.taskNameContainer}>
+                        <Text style={styles.taskName}>{task.taskName}</Text>
+                        <Text style={styles.taskStatusLabel}>{getStatusLabel(task.status)}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.taskRowActions}>
+                      <Text style={styles.taskTime}>{task.scheduledTime}</Text>
+
+                      {task.status === 'pending' ? (
+                        <Pressable
+                          style={[styles.completeButton, completingTaskId === task.id && styles.completeButtonDisabled]}
+                          onPress={() => handleTaskPress(task.id, task.status, task.taskName)}
+                          disabled={completingTaskId === task.id}
+                        >
+                          <Text style={styles.completeButtonText}>{completingTaskId === task.id ? 'Guardando...' : 'Realizada'}</Text>
+                        </Pressable>
+                      ) : (
+                        <Text style={[styles.status, { color: getStatusColor(task.status) }]}>{getStatusSymbol(task.status)}</Text>
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>HOGAR - DIA</Text>
+              {householdRows.length === 0 ? (
+                <Text style={styles.emptyText}>No hay tareas asignadas para tu hogar hoy.</Text>
+              ) : (
+                householdRows.map(row => {
+                  const rowProgress = row.assigned === 0 ? 0 : Math.round((row.completed / row.assigned) * 100)
+                  const isExpanded = expandedHouseholdMemberId === row.member.id
+                  const alert = shouldShowAlert(row.completed, row.assigned)
+
+                  return (
+                    <View key={row.member.id} style={styles.memberBlock}>
+                      <Pressable
+                        style={[styles.memberHeader, isExpanded && styles.memberHeaderExpanded]}
+                        onPress={() => setExpandedHouseholdMemberId(prev => (prev === row.member.id ? null : row.member.id))}
+                      >
+                        <View style={styles.memberIdentity}>
+                          <View style={styles.memberAvatar}><Text style={styles.memberAvatarText}>{row.member.name.charAt(0).toUpperCase()}</Text></View>
+                          <View style={styles.memberMeta}>
+                            <Text style={styles.memberName}>{row.member.name}</Text>
+                            <Text style={styles.memberRatio}>{row.completed}/{row.assigned} completadas</Text>
+                          </View>
+                        </View>
+                        <View style={styles.memberBarTrack}>
+                          <View style={[styles.memberBarFill, { width: `${rowProgress}%` }]} />
+                        </View>
+                        {alert && <Text style={styles.memberAlert}>⚠</Text>}
+                      </Pressable>
+
+                      {isExpanded && (
+                        <View style={styles.memberTasks}>
+                          {row.tasks.map(task => (
+                            <View key={task.id} style={styles.memberTaskRow}>
+                              <Text style={styles.memberTaskName}>{task.taskName}</Text>
+                              <Text style={styles.memberTaskStatus}>{getStatusLabel(task.status)}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  )
+                })
+              )}
+            </>
           )}
         </View>
         </Reveal>
 
-        {tomorrowTasks.length > 0 && (
+        {viewMode === 'mine' && tomorrowTasks.length > 0 && (
           <Reveal delay={200}>
             <View style={styles.tomorrowCard}>
-              <Text style={styles.tomorrowTitle}>Mañana</Text>
+              <Text style={styles.tomorrowTitle}>{`${currentUserName.toUpperCase()} - MAÑANA`}</Text>
               {tomorrowTasks.map(task => (
                 <View key={task.id} style={styles.tomorrowRow}>
                   <View style={styles.tomorrowDot} />
@@ -293,6 +420,28 @@ export default function TodayScreen() {
           </Reveal>
         )}
 
+        {viewMode === 'household' && (
+          <Reveal delay={200}>
+            <View style={styles.tomorrowCard}>
+              <Text style={styles.tomorrowTitle}>HOGAR - MAÑANA</Text>
+              {householdTomorrowWithTasks.length === 0 ? (
+                <Text style={styles.emptyText}>No hay tareas del hogar para mañana.</Text>
+              ) : (
+                householdTomorrowWithTasks.map(row => (
+                  <View key={row.member.id} style={styles.tomorrowRow}>
+                    <View style={styles.tomorrowDot} />
+                    <View style={styles.tomorrowTaskInfo}>
+                      <Text style={styles.tomorrowTaskName}>{row.member.name}</Text>
+                      <Text style={styles.tomorrowTaskMeta}>{row.assigned} tarea{row.assigned === 1 ? '' : 's'}</Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </Reveal>
+        )}
+
+        {viewMode === 'mine' && (
         <Reveal delay={240}>
           <TouchableOpacity
             style={styles.swapButton}
@@ -302,6 +451,7 @@ export default function TodayScreen() {
             <Text style={styles.swapButtonText}>Solicitar intercambio</Text>
           </TouchableOpacity>
         </Reveal>
+        )}
       </ScrollView>
     </View>
   )
@@ -329,8 +479,7 @@ const styles = StyleSheet.create({
   tomorrowTitle: {
     fontSize: 13,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
+    letterSpacing: 0.2,
     color: Colors.text.secondary,
     marginBottom: Spacing.xs,
   },
@@ -435,46 +584,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textTransform: 'capitalize',
   },
-  metricsRow: {
+  viewSwitchRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: Spacing.sm,
     marginTop: Spacing.xs,
   },
-  counter: {
-    color: '#FFF7EF',
-    fontSize: 19,
+  viewSwitchChip: {
+    flex: 1,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 211, 178, 0.35)',
+    backgroundColor: 'rgba(244, 211, 178, 0.08)',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  viewSwitchChipActive: {
+    backgroundColor: 'rgba(214, 139, 69, 0.24)',
+    borderColor: 'rgba(214, 139, 69, 0.5)',
+  },
+  viewSwitchText: {
+    color: '#F4D3B2',
+    fontSize: 12,
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  progress: {
-    color: '#EED8C3',
-    fontSize: 13,
-  },
-  progressBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: BorderRadius.full,
-    backgroundColor: '#F7E3CF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#D9A576',
-  },
-  progressBadgeText: {
-    color: '#8A4C1B',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  progressTrack: {
-    marginTop: Spacing.xs,
-    height: 8,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255, 235, 217, 0.35)',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#D68B45',
+  viewSwitchTextActive: {
+    color: '#FFF7EF',
   },
   quickStatsRow: {
     flexDirection: 'row',
@@ -526,7 +662,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.text.primary,
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '700',
     marginBottom: Spacing.xs,
   },
@@ -561,20 +697,110 @@ const styles = StyleSheet.create({
     fontSize: 14,
     paddingVertical: Spacing.md,
   },
-  taskRow: {
+  memberBlock: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFE2D0',
+    paddingVertical: Spacing.sm + 2,
+    gap: Spacing.xs,
+  },
+  memberHeader: {
+    gap: Spacing.sm,
+    paddingVertical: 4,
+  },
+  memberHeaderExpanded: {
+    opacity: 1,
+  },
+  memberIdentity: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.sm + 2,
-    paddingHorizontal: Spacing.sm,
-    borderWidth: 1,
-    borderColor: '#EEDFCF',
+  },
+  memberAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    backgroundColor: '#F6E6D5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberAvatarText: {
+    color: '#8F5B3E',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  memberMeta: {
+    flex: 1,
+    gap: 2,
+  },
+  memberName: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  memberRatio: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+  },
+  memberBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.border,
+    overflow: 'hidden',
+  },
+  memberBarFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+  },
+  memberAlert: {
+    color: Colors.warning,
+    fontSize: 16,
+  },
+  memberTasks: {
+    backgroundColor: '#FFF6EC',
     borderRadius: BorderRadius.md,
-    backgroundColor: '#FFFFFF',
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderColor: '#EADFCC',
+  },
+  memberTaskRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  memberTaskName: {
+    color: Colors.text.primary,
+    fontSize: 13,
+  },
+  memberTaskStatus: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    textTransform: 'capitalize',
+  },
+  taskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
   taskRowCompleted: {
-    backgroundColor: '#FFFAF5',
-    borderColor: '#E6D2BF',
+    opacity: 0.82,
+  },
+  taskRowContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    minWidth: 0,
+  },
+  taskRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginLeft: Spacing.sm,
   },
   completeButton: {
     borderWidth: 1,
@@ -593,14 +819,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   statusDot: {
-    width: 10,
-    height: 10,
+    width: 8,
+    height: 8,
     borderRadius: BorderRadius.full,
-  },
-  rightMeta: {
-    alignItems: 'flex-end',
-    gap: 2,
-    minWidth: 54,
   },
   status: {
     fontSize: 15,
@@ -610,21 +831,24 @@ const styles = StyleSheet.create({
   },
   taskNameContainer: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: 1,
   },
   taskName: {
     color: Colors.text.primary,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
   },
   taskStatusLabel: {
     color: Colors.text.secondary,
-    fontSize: 12,
+    fontSize: 11,
   },
   taskTime: {
     color: Colors.text.secondary,
     fontSize: 12,
     fontWeight: '600',
+    minWidth: 58,
+    textAlign: 'right',
   },
   feedbackBox: {
     borderRadius: BorderRadius.md,
@@ -674,6 +898,37 @@ const styles = StyleSheet.create({
   swapButtonText: {
     color: '#F8FAFC',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  guardBanner: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  guardBannerTitle: {
+    color: '#92400E',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  guardBannerText: {
+    color: '#78350F',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  guardBannerButton: {
+    marginTop: Spacing.xs,
+    backgroundColor: '#D97706',
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    alignSelf: 'flex-start',
+  },
+  guardBannerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '700',
   },
 })

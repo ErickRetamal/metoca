@@ -10,6 +10,7 @@ import { goToPaywall } from '../../../lib/navigation'
 import { SubscriptionPlan } from '../../../types'
 import { Reveal } from '../../../components/ui/reveal'
 import { Skeleton } from '../../../components/ui/skeleton'
+import { firstNameFromParts, normalizeFirstAndLast } from '../../../lib/user-name'
 
 type GenderValue = 'masculino' | 'femenino' | 'otro' | 'prefiero_no_decir'
 
@@ -25,18 +26,6 @@ function getPlanLabel(plan: SubscriptionPlan): string {
 function getHouseholdLabel(name: string, plan: SubscriptionPlan): string {
   const resolvedName = name || 'Vinculado'
   return `${resolvedName} (${getPlanLabel(plan)})`
-}
-
-function getFullName(firstName: string | null, lastName: string | null, fallbackEmail?: string): string {
-  const full = `${firstName ?? ''} ${lastName ?? ''}`.trim()
-  if (full) return full
-
-  if (fallbackEmail) {
-    const [name] = fallbackEmail.split('@')
-    if (name) return name
-  }
-
-  return 'Usuario'
 }
 
 function getGenderLabel(gender: string | null): string {
@@ -127,8 +116,9 @@ export default function ProfileScreen() {
         const fallbackAvatarInitial = userData.user?.user_metadata?.avatar_initial as string | undefined
         const fallbackAvatarColor = userData.user?.user_metadata?.avatar_color as string | undefined
 
-        const nextFirstName = dbFirstName ?? fallbackFirst ?? ''
-        const nextLastName = dbLastName ?? fallbackLast ?? ''
+        const normalizedName = normalizeFirstAndLast(dbFirstName ?? fallbackFirst ?? '', dbLastName ?? fallbackLast ?? '')
+        const nextFirstName = normalizedName.firstName
+        const nextLastName = normalizedName.lastName
 
         setFirstName(nextFirstName)
         setLastName(nextLastName)
@@ -136,7 +126,7 @@ export default function ProfileScreen() {
         setDraftFirstName(nextFirstName)
         setDraftLastName(nextLastName)
         setDraftGender((dbUser?.gender ?? fallbackGender ?? 'prefiero_no_decir') as GenderValue)
-        const resolvedName = getFullName(nextFirstName, nextLastName, userEmail)
+        const resolvedName = firstNameFromParts(nextFirstName, nextLastName, userEmail)
         const resolvedInitial = normalizeAvatarInitial(fallbackAvatarInitial ?? '', resolvedName)
         const resolvedColor = resolveAvatarColor(fallbackAvatarColor)
 
@@ -150,7 +140,7 @@ export default function ProfileScreen() {
         setIsInHousehold(Boolean((membership as any)?.household_id))
         setHouseholdName(linkedHouseholdName)
       } else {
-        const resolvedName = getFullName(null, null, userEmail)
+        const resolvedName = firstNameFromParts(null, null, userEmail)
         const fallbackAvatarInitial = userData.user?.user_metadata?.avatar_initial as string | undefined
         const fallbackAvatarColor = userData.user?.user_metadata?.avatar_color as string | undefined
 
@@ -241,8 +231,9 @@ export default function ProfileScreen() {
       return
     }
 
-    const nextFirstName = draftFirstName.trim()
-    const nextLastName = draftLastName.trim()
+    const normalizedName = normalizeFirstAndLast(draftFirstName, draftLastName)
+    const nextFirstName = normalizedName.firstName
+    const nextLastName = normalizedName.lastName
     const nextAvatarInitial = normalizeAvatarInitial(draftAvatarInitial, `${nextFirstName} ${nextLastName}`)
 
     if (!nextFirstName || !nextLastName) {
@@ -250,7 +241,7 @@ export default function ProfileScreen() {
       return
     }
 
-    const fullName = `${nextFirstName} ${nextLastName}`.trim()
+    const fullName = normalizedName.fullName
 
     setSavingProfile(true)
 
@@ -289,7 +280,7 @@ export default function ProfileScreen() {
     setAvatarInitial(nextAvatarInitial)
     setAvatarColor(draftAvatarColor)
     setDraftAvatarInitial(nextAvatarInitial)
-    setDisplayName(fullName)
+    setDisplayName(firstNameFromParts(nextFirstName, nextLastName, email))
     setIsEditing(false)
   }
 

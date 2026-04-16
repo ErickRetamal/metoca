@@ -1,11 +1,14 @@
 import { Tabs } from 'expo-router'
 import { Platform, StyleSheet } from 'react-native'
 import { MagicTabBar } from '../../../components/dashboard/magic-tab-bar'
+import { useMenuContext } from '../../../lib/menu-context'
 
 export default function TabsLayout() {
+  const { canManageTasks } = useMenuContext()
+
   return (
     <Tabs
-      tabBar={props => <MagicTabBar {...props} />}
+      tabBar={props => <MagicTabBar {...props} canManageTasks={canManageTasks} />}
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
@@ -23,12 +26,11 @@ export default function TabsLayout() {
         options={{ title: 'Mi mes' }}
       />
       <Tabs.Screen
-        name="household-today"
-        options={{ title: 'Hogar hoy' }}
-      />
-      <Tabs.Screen
-        name="household-month"
-        options={{ title: 'Hogar mes' }}
+        name="tasks"
+        options={{
+          title: 'Asignar',
+          href: canManageTasks ? '/(app)/(tabs)/tasks' : null,
+        }}
       />
       <Tabs.Screen
         name="task-month-detail"

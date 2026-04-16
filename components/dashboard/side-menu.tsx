@@ -1,6 +1,6 @@
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Animated, Easing, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { BorderRadius, Colors, Spacing } from '../../constants/theme'
 
 export type DashboardMenuSection =
@@ -68,7 +68,7 @@ export function SideMenu({ visible, onClose, currentSection, canManageTasks = fa
     backdropOpacity.setValue(0)
   }, [visible, backdropOpacity, slideX])
 
-  const requestClose = () => {
+  const requestClose = (onAfterClose?: () => void) => {
     Animated.parallel([
       Animated.timing(slideX, {
         toValue: -PANEL_WIDTH,
@@ -84,6 +84,7 @@ export function SideMenu({ visible, onClose, currentSection, canManageTasks = fa
       }),
     ]).start(() => {
       onClose()
+      onAfterClose?.()
     })
   }
 
@@ -92,59 +93,71 @@ export function SideMenu({ visible, onClose, currentSection, canManageTasks = fa
   }
 
   const handleNavigate = (path: string) => {
-    requestClose()
-    setTimeout(() => {
+    requestClose(() => {
       router.push(path)
-    }, 40)
+    })
   }
 
   const visibleMenuItems = canManageTasks
     ? MENU_ITEMS
     : MENU_ITEMS.filter(item => item.key !== 'tasks')
 
+  const menuContent = (
+    <View style={styles.menuRoot}>
+      <Animated.View style={[styles.menuPanel, { transform: [{ translateX: slideX }] }]}>
+        <View style={styles.menuHeaderRow}>
+          <Text style={styles.menuTitle}>Menu</Text>
+          <Pressable style={styles.menuCloseButton} onPress={() => requestClose()}>
+            <Text style={styles.menuCloseButtonText}>Cerrar</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.menuSubtitle}>Navegacion del dashboard</Text>
+
+        <View style={styles.menuOptions}>
+          {visibleMenuItems.map(item => {
+            const isActive = currentSection === item.key
+
+            return (
+              <Pressable
+                key={item.key}
+                style={[styles.menuOptionButton, isActive && styles.menuOptionButtonActive]}
+                onPress={() => handleNavigate(item.path)}
+              >
+                <View style={[styles.menuBadge, isActive && styles.menuBadgeActive]}>
+                  <Text style={[styles.menuBadgeText, isActive && styles.menuBadgeTextActive]}>{item.badge}</Text>
+                </View>
+                <Text style={[styles.menuOptionText, isActive && styles.menuOptionTextActive]}>{item.label}</Text>
+                {item.key === 'tasks' && (
+                  <View style={styles.adminTag}>
+                    <Text style={styles.adminTagText}>ADMIN</Text>
+                  </View>
+                )}
+                {isActive && <Text style={styles.menuActiveTag}>Activo</Text>}
+              </Pressable>
+            )
+          })}
+        </View>
+      </Animated.View>
+
+      <Pressable style={styles.menuBackdrop} onPress={() => requestClose()}>
+        <Animated.View style={[styles.menuBackdropFill, { opacity: backdropOpacity }]} />
+      </Pressable>
+    </View>
+  )
+
+  if (Platform.OS === 'web') {
+    return <View style={styles.webMenuOverlay}>{menuContent}</View>
+  }
+
   return (
     <Modal
       visible={isMounted}
       transparent
       animationType="none"
-      onRequestClose={requestClose}
+      onRequestClose={() => requestClose()}
     >
-      <View style={styles.menuRoot}>
-        <Animated.View style={[styles.menuPanel, { transform: [{ translateX: slideX }] }]}>
-          <View style={styles.menuHeaderRow}>
-            <Text style={styles.menuTitle}>Menu</Text>
-            <Pressable style={styles.menuCloseButton} onPress={requestClose}>
-              <Text style={styles.menuCloseButtonText}>Cerrar</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.menuSubtitle}>Navegacion del dashboard</Text>
-
-          <View style={styles.menuOptions}>
-            {visibleMenuItems.map(item => {
-              const isActive = currentSection === item.key
-
-              return (
-                <Pressable
-                  key={item.key}
-                  style={[styles.menuOptionButton, isActive && styles.menuOptionButtonActive]}
-                  onPress={() => handleNavigate(item.path)}
-                >
-                  <View style={[styles.menuBadge, isActive && styles.menuBadgeActive]}>
-                    <Text style={[styles.menuBadgeText, isActive && styles.menuBadgeTextActive]}>{item.badge}</Text>
-                  </View>
-                  <Text style={[styles.menuOptionText, isActive && styles.menuOptionTextActive]}>{item.label}</Text>
-                  {isActive && <Text style={styles.menuActiveTag}>Activo</Text>}
-                </Pressable>
-              )
-            })}
-          </View>
-        </Animated.View>
-
-        <Pressable style={styles.menuBackdrop} onPress={requestClose}>
-          <Animated.View style={[styles.menuBackdropFill, { opacity: backdropOpacity }]} />
-        </Pressable>
-      </View>
+      {menuContent}
     </Modal>
   )
 }
@@ -170,6 +183,10 @@ const styles = StyleSheet.create({
   menuRoot: {
     flex: 1,
     flexDirection: 'row',
+  },
+  webMenuOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
   },
   menuPanel: {
     width: 292,
@@ -300,6 +317,20 @@ const styles = StyleSheet.create({
   menuOptionTextActive: {
     color: '#1E3A8A',
     fontWeight: '700',
+  },
+  adminTag: {
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: '#B45309',
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  adminTagText: {
+    color: '#B45309',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   menuActiveTag: {
     color: '#1E3A8A',

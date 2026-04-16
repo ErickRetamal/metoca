@@ -16,6 +16,8 @@ import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { supabase } from '../../lib/supabase'
 import { Colors, Spacing, BorderRadius } from '../../constants/theme'
+import { identifyPurchaseUser } from '../../lib/purchases'
+import { normalizeFirstAndLast } from '../../lib/user-name'
 
 export default function RegisterScreen() {
   const router = useRouter()
@@ -32,8 +34,9 @@ export default function RegisterScreen() {
     isSubmittingRef.current = true
 
     const trimmedEmail = email.trim().toLowerCase()
-    const trimmedFirstName = firstName.trim()
-    const trimmedLastName = lastName.trim()
+    const normalizedName = normalizeFirstAndLast(firstName, lastName)
+    const trimmedFirstName = normalizedName.firstName
+    const trimmedLastName = normalizedName.lastName
 
     if (!trimmedFirstName || !trimmedLastName || !trimmedEmail || !password) {
       Alert.alert('Faltan datos', 'Ingresa nombre, apellido, correo y una contraseña.')
@@ -46,7 +49,7 @@ export default function RegisterScreen() {
       return
     }
 
-    const fullName = `${trimmedFirstName} ${trimmedLastName}`.trim()
+    const fullName = normalizedName.fullName
 
     setLoading(true)
     const { data, error } = await supabase.auth.signUp({
@@ -79,16 +82,16 @@ export default function RegisterScreen() {
     }
 
     if (!data.session) {
-      Alert.alert(
-        'Revisa tu correo',
-        `Te enviamos un enlace de verificacion a ${trimmedEmail}. Puedes continuar por ahora y confirmarlo despues.`
-      )
+      router.replace({
+        pathname: '/(auth)/check-email',
+        params: { email: trimmedEmail },
+      })
+      return
     }
 
-    router.replace({
-      pathname: '/(auth)/paywall',
-      params: { email: trimmedEmail },
-    })
+    await identifyPurchaseUser(data.user.id).catch(() => undefined)
+
+    router.replace('/(auth)/push-permission')
   }
 
   return (

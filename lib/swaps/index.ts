@@ -1,6 +1,7 @@
 import { CURRENT_USER_ID } from '../dashboard'
 import { supabase } from '../supabase'
 import { SwapScope } from '../../types'
+import { firstNameOnly, nameFromEmail } from '../user-name'
 
 export interface SwapExecutionOption {
   executionId: string
@@ -122,7 +123,7 @@ export async function getSwapRequestData(): Promise<SwapRequestData> {
 
     const members = memberRows.map((row: any) => ({
       id: row.user_id,
-      name: row.users?.name ?? row.users?.email?.split('@')[0] ?? 'Miembro',
+      name: firstNameOnly(row.users?.name ?? nameFromEmail(row.users?.email), 'Miembro'),
     }))
 
     const memberIds = members.map(member => member.id)
@@ -251,7 +252,7 @@ export async function getIncomingSwapRequests(): Promise<IncomingSwapRequest[]> 
 
     const usersMap = new Map<string, string>()
     usersRows?.forEach((row: any) => {
-      usersMap.set(row.id, row.name ?? row.email?.split('@')[0] ?? 'Miembro')
+      usersMap.set(row.id, firstNameOnly(row.name ?? nameFromEmail(row.email), 'Miembro'))
     })
 
     const executionsMap = new Map<string, string>()

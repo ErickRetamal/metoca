@@ -1,6 +1,7 @@
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { BorderRadius, Colors } from '../../constants/theme'
 
 type RouteIconName =
@@ -8,30 +9,15 @@ type RouteIconName =
   | 'home-outline'
   | 'calendar'
   | 'calendar-outline'
-  | 'people'
-  | 'people-outline'
-  | 'bar-chart'
-  | 'bar-chart-outline'
+  | 'checkbox'
+  | 'checkbox-outline'
   | 'ellipse'
   | 'ellipse-outline'
 
 const TAB_HORIZONTAL_PADDING = 8
-const INDICATOR_SIZE = 52
-const LABEL_PILL_WIDTH = 64
+const INDICATOR_HEIGHT = 48
+const INDICATOR_WIDTH = 132
 const HIDDEN_TAB_ROUTES = new Set(['task-month-detail', 'household-task-month-detail'])
-
-const OUTER_SHADOW_STYLE = Platform.select({
-  web: {
-    boxShadow: '0px 8px 18px rgba(90, 64, 45, 0.16)',
-  },
-  default: {
-    shadowColor: '#5A402D',
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
-})
 
 const INDICATOR_SHADOW_STYLE = Platform.select({
   web: {
@@ -46,6 +32,19 @@ const INDICATOR_SHADOW_STYLE = Platform.select({
   },
 })
 
+const BAR_SHELL_SHADOW_STYLE = Platform.select({
+  web: {
+    boxShadow: '0px 10px 24px rgba(92, 64, 39, 0.12)',
+  },
+  default: {
+    shadowColor: '#5C4027',
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+})
+
 function resolveIconName(routeName: string, focused: boolean): RouteIconName {
   if (routeName === 'today') {
     return focused ? 'home' : 'home-outline'
@@ -55,12 +54,8 @@ function resolveIconName(routeName: string, focused: boolean): RouteIconName {
     return focused ? 'calendar' : 'calendar-outline'
   }
 
-  if (routeName === 'household-today') {
-    return focused ? 'people' : 'people-outline'
-  }
-
-  if (routeName === 'household-month') {
-    return focused ? 'bar-chart' : 'bar-chart-outline'
+  if (routeName === 'tasks') {
+    return focused ? 'checkbox' : 'checkbox-outline'
   }
 
   return focused ? 'ellipse' : 'ellipse-outline'
@@ -69,42 +64,33 @@ function resolveIconName(routeName: string, focused: boolean): RouteIconName {
 function resolveAccentColor(routeName: string): string {
   if (routeName === 'today') return '#C96B2C'
   if (routeName === 'my-month') return '#8F5B3E'
-  if (routeName === 'household-today') return '#5D8A64'
-  if (routeName === 'household-month') return '#B6493A'
+  if (routeName === 'tasks') return '#A14A33'
   return Colors.primary
 }
 
 function resolveShortLabel(routeName: string): string {
   if (routeName === 'today') return 'Hoy'
   if (routeName === 'my-month') return 'Mes'
-  if (routeName === 'household-today') return 'Casa'
-  if (routeName === 'household-month') return 'Hogar'
+  if (routeName === 'tasks') return 'Asignar'
   return ''
 }
 
-function resolveIconGlyph(iconName: RouteIconName): string {
-  if (iconName === 'home') return '⌂'
-  if (iconName === 'home-outline') return '⌂'
-  if (iconName === 'calendar') return '◫'
-  if (iconName === 'calendar-outline') return '◫'
-  if (iconName === 'people') return '◉'
-  if (iconName === 'people-outline') return '◉'
-  if (iconName === 'bar-chart') return '▮'
-  if (iconName === 'bar-chart-outline') return '▯'
-  if (iconName === 'ellipse') return '●'
-  return '○'
-}
-
-export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function MagicTabBar({ state, descriptors, navigation, canManageTasks = false }: BottomTabBarProps & { canManageTasks?: boolean }) {
   const [barWidth, setBarWidth] = useState(0)
   const [tabCenters, setTabCenters] = useState<number[]>([])
-  const centerX = useRef(new Animated.Value(INDICATOR_SIZE / 2)).current
+  const centerX = useRef(new Animated.Value(INDICATOR_WIDTH / 2)).current
   const colorIndex = useRef(new Animated.Value(state.index)).current
   const iconScale = useRef(state.routes.map((_, index) => new Animated.Value(index === state.index ? 1.1 : 1))).current
 
   const visibleRoutes = useMemo(
-    () => state.routes.filter(route => !HIDDEN_TAB_ROUTES.has(route.name)),
-    [state.routes]
+    () =>
+      state.routes.filter(route => {
+        if (HIDDEN_TAB_ROUTES.has(route.name)) return false
+        if (route.name === 'tasks' && !canManageTasks) return false
+        const options = descriptors[route.key]?.options
+        return options?.href !== null
+      }),
+    [state.routes, descriptors, canManageTasks]
   )
 
   const activeVisibleIndex = useMemo(() => {
@@ -125,7 +111,7 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
       return measuredCenter
     }
 
-    if (tabWidth <= 0) return INDICATOR_SIZE / 2
+    if (tabWidth <= 0) return INDICATOR_WIDTH / 2
     return TAB_HORIZONTAL_PADDING + activeVisibleIndex * tabWidth + tabWidth / 2
   }, [activeVisibleIndex, tabWidth, tabCenters])
 
@@ -177,84 +163,80 @@ export function MagicTabBar({ state, descriptors, navigation }: BottomTabBarProp
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.outerShadow}>
-        <View style={styles.barClip}>
-          <View style={styles.container} onLayout={onBarLayout}>
-            <Animated.View
-              style={[
-                styles.indicator,
-                {
-                  backgroundColor: indicatorColor,
-                  borderColor: indicatorColor,
-                  transform: [{ translateX: Animated.subtract(centerX, INDICATOR_SIZE / 2) }],
-                },
-              ]}
-            >
-              <Text style={styles.activeIconText}>{resolveIconGlyph(activeIconName)}</Text>
+      <View style={styles.barClip}>
+        <View style={styles.container} onLayout={onBarLayout}>
+          <Animated.View
+            style={[
+              styles.indicator,
+              {
+                backgroundColor: indicatorColor,
+                borderColor: indicatorColor,
+                transform: [{ translateX: Animated.subtract(centerX, INDICATOR_WIDTH / 2) }],
+              },
+            ]}
+          >
+            <View style={styles.activeContentRow}>
+              <Ionicons name={activeIconName} size={20} color={Colors.text.inverse} />
+              <Text style={styles.activeLabelInline}>{resolveShortLabel(activeRouteName)}</Text>
+            </View>
+          </Animated.View>
 
-              <View style={styles.activeLabelPill}>
-                <Text style={styles.activeLabelPillText}>{resolveShortLabel(activeRouteName)}</Text>
-              </View>
-            </Animated.View>
+          {visibleRoutes.map((route, index) => {
+            const routeIndex = state.routes.findIndex(item => item.key === route.key)
+            const focused = state.index === routeIndex
+            const { options } = descriptors[route.key]
 
-            {visibleRoutes.map((route, index) => {
-              const routeIndex = state.routes.findIndex(item => item.key === route.key)
-              const focused = state.index === routeIndex
-              const { options } = descriptors[route.key]
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              })
 
-              const onPress = () => {
-                const event = navigation.emit({
-                  type: 'tabPress',
-                  target: route.key,
-                  canPreventDefault: true,
-                })
-
-                if (!focused && !event.defaultPrevented) {
-                  navigation.navigate(route.name)
-                }
+              if (!focused && !event.defaultPrevented) {
+                navigation.navigate(route.name)
               }
+            }
 
-              const onLongPress = () => {
-                navigation.emit({
-                  type: 'tabLongPress',
-                  target: route.key,
-                })
-              }
+            const onLongPress = () => {
+              navigation.emit({
+                type: 'tabLongPress',
+                target: route.key,
+              })
+            }
 
-              const iconName = resolveIconName(route.name, focused)
-              const tintColor = focused ? 'transparent' : '#8E7869'
-              const accessibilityLabel = options.tabBarAccessibilityLabel ?? options.title ?? route.name
+            const iconName = resolveIconName(route.name, focused)
+            const tintColor = focused ? 'transparent' : '#685345'
+            const accessibilityLabel = options.tabBarAccessibilityLabel ?? options.title ?? route.name
 
-              return (
-                <Pressable
-                  key={route.key}
-                  accessibilityRole="button"
-                  accessibilityState={focused ? { selected: true } : {}}
-                  accessibilityLabel={accessibilityLabel}
-                  onPress={onPress}
-                  onLongPress={onLongPress}
-                  style={styles.tabButton}
-                  onLayout={event => {
-                    const { x, width } = event.nativeEvent.layout
-                    const center = x + width / 2
+            return (
+              <Pressable
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityState={focused ? { selected: true } : {}}
+                accessibilityLabel={accessibilityLabel}
+                onPress={onPress}
+                onLongPress={onLongPress}
+                style={styles.tabButton}
+                onLayout={event => {
+                  const { x, width } = event.nativeEvent.layout
+                  const center = x + width / 2
 
-                    setTabCenters(prev => {
-                      if (prev[index] === center) return prev
-                      const next = [...prev]
-                      next[index] = center
-                      return next
-                    })
-                  }}
-                >
-                  <Animated.View style={[styles.iconWrap, { transform: [{ scale: routeIndex >= 0 ? iconScale[routeIndex] : 1 }] }]}>
-                    <Text style={[styles.iconText, { color: tintColor }]}>{resolveIconGlyph(iconName)}</Text>
-                  </Animated.View>
-                </Pressable>
-              )
-            })}
-          </View>
+                  setTabCenters(prev => {
+                    if (prev[index] === center) return prev
+                    const next = [...prev]
+                    next[index] = center
+                    return next
+                  })
+                }}
+              >
+                <Animated.View style={[styles.iconWrap, { transform: [{ scale: routeIndex >= 0 ? iconScale[routeIndex] : 1 }] }]}>
+                  <Ionicons name={iconName} size={21} color={tintColor} />
+                </Animated.View>
+              </Pressable>
+            )
+          })}
         </View>
-
       </View>
     </View>
   )
@@ -268,78 +250,62 @@ const styles = StyleSheet.create({
     bottom: Platform.OS === 'ios' ? 18 : 12,
     pointerEvents: 'box-none',
   },
-  outerShadow: {
-    overflow: 'visible',
-    ...OUTER_SHADOW_STYLE,
-  },
   barClip: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: Colors.surface,
+    borderRadius: 28,
+    overflow: 'visible',
+    backgroundColor: 'rgba(255, 248, 241, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(214, 191, 167, 0.9)',
+    ...BAR_SHELL_SHADOW_STYLE,
   },
   container: {
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E7D6C4',
-    minHeight: 74,
-    paddingHorizontal: 8,
+    backgroundColor: 'transparent',
+    borderRadius: 28,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    minHeight: 68,
+    paddingHorizontal: 10,
     overflow: 'visible',
   },
   tabButton: {
     flex: 1,
-    height: 68,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
   },
   iconWrap: {
-    width: INDICATOR_SIZE,
-    height: INDICATOR_SIZE,
+    width: INDICATOR_HEIGHT,
+    height: INDICATOR_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconText: {
-    fontSize: 20,
-    fontWeight: '800',
+  activeContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
   },
-  activeIconText: {
+  activeLabelInline: {
     color: Colors.text.inverse,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  activeLabelPill: {
-    position: 'absolute',
-    width: LABEL_PILL_WIDTH,
-    left: (INDICATOR_SIZE - LABEL_PILL_WIDTH) / 2,
-    bottom: -15,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: '#E7D6C4',
-    backgroundColor: '#FFF8F1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  activeLabelPillText: {
-    color: '#5A402D',
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: '800',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    width: '100%',
+    letterSpacing: 0.3,
+    textTransform: 'capitalize',
   },
   indicator: {
     position: 'absolute',
-    top: 9,
-    width: INDICATOR_SIZE,
-    height: INDICATOR_SIZE,
+    top: 8,
+    width: INDICATOR_WIDTH,
+    height: INDICATOR_HEIGHT,
     borderRadius: BorderRadius.full,
     borderWidth: 2,
+    borderColor: '#EAD0B8',
     alignItems: 'center',
     justifyContent: 'center',
     ...INDICATOR_SHADOW_STYLE,

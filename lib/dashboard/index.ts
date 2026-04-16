@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { TaskExecutionStatus, SubscriptionPlan, TaskFrequency } from '../../types'
+import { firstNameOnly, nameFromEmail } from '../user-name'
 
 export interface DashboardTaskExecution {
   id: string
@@ -86,8 +87,13 @@ function normalizeTaskRows(rows: any[]): DashboardTaskExecution[] {
   const today = formatDateKey(getNow())
 
   return rows.map(row => ({
-    // Pending executions scheduled in the past are considered missed for UI analytics.
-    status: row.status === 'pending' && String(row.scheduled_date) < today ? 'missed' : row.status,
+    // Tasks remain completable for the whole scheduled day even if another process marked them missed early.
+    status:
+      row.status === 'missed' && String(row.scheduled_date) === today
+        ? 'pending'
+        : row.status === 'pending' && String(row.scheduled_date) < today
+          ? 'missed'
+          : row.status,
     id: row.id,
     assignedTo: row.assigned_to,
     scheduledDate: row.scheduled_date,
@@ -149,7 +155,7 @@ async function resolveContext(): Promise<DashboardContext> {
         }
       }
 
-      const currentUserName = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'Usuario'
+      const currentUserName = firstNameOnly(user.user_metadata?.name ?? nameFromEmail(user.email), 'Usuario')
       const currentMember: DashboardMember = { id: user.id, name: currentUserName }
 
       const { data: membership } = await supabase
@@ -186,11 +192,11 @@ async function resolveContext(): Promise<DashboardContext> {
       const members: DashboardMember[] =
         memberRows?.map((row: any) => ({
           id: row.user_id,
-          name: row.users?.name ?? row.users?.email?.split('@')[0] ?? 'Miembro',
+          name: firstNameOnly(row.users?.name ?? nameFromEmail(row.users?.email), 'Miembro'),
         })) ?? [currentMember]
 
       const resolvedCurrentUserName =
-        members.find(member => member.id === user.id)?.name ?? user.email?.split('@')[0] ?? 'Usuario'
+        members.find(member => member.id === user.id)?.name ?? firstNameOnly(nameFromEmail(user.email), 'Usuario')
 
       return {
         currentUserId: user.id,
@@ -251,6 +257,10 @@ export function getMyMonthTasks(monthOffset: number, userId?: string): Dashboard
 
 export function getHouseholdTodaySummary() {
   return getMockHouseholdTodaySummary()
+}
+
+export function getHouseholdTomorrowSummary() {
+  return []
 }
 
 export function getHouseholdMonthSummary(monthOffset: number) {
@@ -406,9 +416,25 @@ export async function getMonthTasksAsync(monthOffset: number, userId?: string): 
 export async function getHouseholdTodaySummaryAsync() {
   const context = await resolveContext()
   const today = formatDateKey(getNow())
+  return getHouseholdSummaryByDateKeyAsync(context, today, getHouseholdTodaySummary())
+}
+
+export async function getHouseholdTomorrowSummaryAsync() {
+  const context = await resolveContext()
+  const tomorrow = new Date(getNow())
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowKey = formatDateKey(tomorrow)
+  return getHouseholdSummaryByDateKeyAsync(context, tomorrowKey, getHouseholdTomorrowSummary())
+}
+
+async function getHouseholdSummaryByDateKeyAsync(
+  context: DashboardContext,
+  scheduledDate: string,
+  fallback: Array<{ member: DashboardMember; assigned: number; completed: number; tasks: DashboardTaskExecution[] }>
+) {
 
   if (!context.householdId) {
-    return getHouseholdTodaySummary()
+    return fallback
   }
 
   const memberIds = context.members.map(member => member.id)
@@ -420,12 +446,13 @@ export async function getHouseholdTodaySummaryAsync() {
     .from('task_executions')
     .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks!inner(name, frequency, is_active, deleted_at)')
     .in('assigned_to', memberIds)
-    .eq('scheduled_date', today)
+    .eq('scheduled_date', scheduledDate)
     .eq('tasks.is_active', true)
     .is('tasks.deleted_at', null)
+    .order('scheduled_time', { ascending: true })
 
   if (error || !data) {
-    return getHouseholdTodaySummary()
+    return fallback
   }
 
   const tasks = normalizeTaskRows(data)
@@ -540,4 +567,54 @@ export async function getHouseholdMonthTasksAsync(monthOffset: number): Promise<
     scheduledTime: task.scheduledTime,
     status: task.status,
   }))
+}
+
+export interface PlanGuardStatus {
+  overCapacity: boolean
+  effectivePlan: SubscriptionPlan
+  maxMembers: number
+  activeMembers: number
+  membersToRemove: number
+  graceEndsAt: string | null
+  membersPreview: Array<{ user_id: string; name: string }>
+}
+
+export async function getPlanGuardStatusAsync(): Promise<PlanGuardStatus | null> {
+  const context = await resolveContext()
+  if (!context.householdId) return null
+
+  const { data: household } = await supabase
+    .from('households')
+    .select('admin_user_id')
+    .eq('id', context.householdId)
+    .maybeSingle()
+
+  if (!household || household.admin_user_id !== context.currentUserId) return null
+
+  const { data: guardData } = await supabase.rpc('get_household_plan_guard_status', {
+    p_household_id: context.householdId,
+  })
+
+  if (!guardData || (guardData as any).over_capacity !== true) return null
+
+  const rawMembers = Array.isArray((guardData as any).members_preview)
+    ? (guardData as any).members_preview
+    : []
+
+  return {
+    overCapacity: true,
+    effectivePlan: ((guardData as any).effective_plan ?? 'free') as SubscriptionPlan,
+    maxMembers: Number((guardData as any).max_members ?? 2),
+    activeMembers: Number((guardData as any).active_members ?? 0),
+    membersToRemove: Number((guardData as any).members_to_remove ?? 0),
+    graceEndsAt: typeof (guardData as any).grace_ends_at === 'string'
+      ? (guardData as any).grace_ends_at
+      : null,
+    membersPreview: rawMembers
+      .map((row: any) => ({
+        user_id: String(row.user_id ?? ''),
+        name: firstNameOnly(String(row.name ?? ''), 'Miembro'),
+      }))
+      .filter((row: any) => row.user_id),
+  }
 }

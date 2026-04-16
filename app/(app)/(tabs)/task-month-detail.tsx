@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { Skeleton } from '../../../components/ui/skeleton'
 import { getMonthKey, getMonthTasksAsync } from '../../../lib/dashboard'
+import { firstNameOnly } from '../../../lib/user-name'
 
 function formatMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split('-').map(Number)
@@ -47,7 +48,7 @@ export default function TaskMonthDetailScreen() {
   const taskName = typeof params.taskName === 'string' ? params.taskName : ''
   const frequency = typeof params.frequency === 'string' ? params.frequency : 'daily'
   const memberId = typeof params.memberId === 'string' ? params.memberId : undefined
-  const memberName = typeof params.memberName === 'string' ? params.memberName : undefined
+  const memberName = typeof params.memberName === 'string' ? firstNameOnly(params.memberName, 'Usuario') : undefined
 
   const [executions, setExecutions] = useState<Array<{
     id: string

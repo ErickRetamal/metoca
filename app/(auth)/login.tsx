@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { supabase } from '../../lib/supabase'
 import { Colors, Spacing, BorderRadius } from '../../constants/theme'
+import { identifyPurchaseUser } from '../../lib/purchases'
 
 export default function LoginScreen() {
   const router = useRouter()
@@ -33,7 +34,7 @@ export default function LoginScreen() {
     setInlineError(null)
 
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: trimmedEmail,
       password,
     })
@@ -71,7 +72,11 @@ export default function LoginScreen() {
       Alert.alert('No pudimos iniciar sesión', message)
       return
     }
-    router.replace('/(auth)/paywall')
+    if (data.user) {
+      await identifyPurchaseUser(data.user.id).catch(() => undefined)
+    }
+
+    router.replace('/(app)/(tabs)/today')
   }
 
   return (

@@ -1,11 +1,11 @@
 import { useState } from 'react'
+import { router } from 'expo-router'
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { supabase } from '../../lib/supabase'
 import { requestPushPermission, registerPushToken } from '../../lib/notifications'
 import { Colors, Spacing, BorderRadius } from '../../constants/theme'
 import { AnimatedBorderCard } from '../../components/ui/animated-border-card'
-import { goToPaywall } from '../../lib/navigation'
 
 export default function PushPermissionScreen() {
   const [loading, setLoading] = useState(false)
@@ -20,11 +20,11 @@ export default function PushPermissionScreen() {
     }
 
     setLoading(false)
-    goToPaywall('push-permission-allow')
+    router.replace('/(app)/(tabs)/today')
   }
 
   const handleSkip = () => {
-    goToPaywall('push-permission-skip')
+    router.replace('/(app)/(tabs)/today')
   }
 
   return (

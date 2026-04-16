@@ -38,6 +38,7 @@ export default function AppLayout() {
         .from('households')
         .select('admin_user_id')
         .eq('id', membership.household_id)
+        .is('deleted_at', null)
         .maybeSingle()
 
       if (!mounted) return
@@ -52,7 +53,7 @@ export default function AppLayout() {
   }, [pathname])
 
   const currentSection = useMemo<DashboardMenuSection>(() => {
-    if (pathname.includes('/configure-tasks')) return 'tasks'
+    if (pathname.includes('/configure-tasks') || pathname.includes('/(tabs)/tasks')) return 'tasks'
     if (pathname.includes('/profile')) return 'profile'
     if (pathname.includes('/settings')) return 'settings'
     if (pathname.includes('/household')) return 'household'
@@ -60,7 +61,7 @@ export default function AppLayout() {
   }, [pathname])
 
   return (
-    <MenuContext.Provider value={{ onMenuPress: () => setIsMenuOpen(true) }}>
+    <MenuContext.Provider value={{ onMenuPress: () => setIsMenuOpen(true), canManageTasks }}>
       <LayoutShell variant="app">
         <View style={styles.container}>
           <SideMenu

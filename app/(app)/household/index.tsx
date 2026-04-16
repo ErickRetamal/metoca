@@ -10,6 +10,7 @@ import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
 import { getCurrentPlanAsync, invalidateDashboardContextCache } from '../../../lib/dashboard'
 import { goToPaywall } from '../../../lib/navigation'
+import { firstNameOnly, nameFromEmail } from '../../../lib/user-name'
 
 interface TaskTemplate {
   key: string
@@ -166,7 +167,7 @@ export default function HouseholdScreen() {
       const members: { id: string; name: string; profile: MemberProfile }[] =
         (memberRows ?? []).map((row: any) => ({
           id: row.user_id,
-          name: row.users?.name ?? row.users?.email?.split('@')[0] ?? 'Miembro',
+          name: firstNameOnly(row.users?.name ?? nameFromEmail(row.users?.email), 'Miembro'),
           profile: (row.profile ?? 'adulto') as MemberProfile,
         }))
 
@@ -198,7 +199,7 @@ export default function HouseholdScreen() {
           membersPreview: rawMembers
             .map((row: any) => ({
               user_id: String(row.user_id ?? ''),
-              name: String(row.name ?? 'Miembro'),
+              name: firstNameOnly(String(row.name ?? ''), 'Miembro'),
             }))
             .filter((row: any) => row.user_id),
         })
@@ -732,6 +733,9 @@ export default function HouseholdScreen() {
   const graceDaysLeft = planGuardNotice?.graceEndsAt
     ? Math.max(0, Math.ceil((new Date(planGuardNotice.graceEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null
+  const graceEndsFormatted = planGuardNotice?.graceEndsAt
+    ? new Date(planGuardNotice.graceEndsAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
 
   if (loading) {
     return (
@@ -797,7 +801,7 @@ export default function HouseholdScreen() {
               Tu hogar tiene {planGuardNotice.activeMembers} miembros, pero el plan {planGuardNotice.effectivePlan} permite {planGuardNotice.maxMembers}.
             </Text>
             <Text style={styles.guardWarningText}>
-              Si no actualizan el plan en {graceDaysLeft ?? 0} días, se removerán {planGuardNotice.membersToRemove} miembro(s) por menor antigüedad.
+              Si no actualizan el plan en {graceDaysLeft ?? 0} días{graceEndsFormatted ? ` (antes del ${graceEndsFormatted})` : ''}, se removerán {planGuardNotice.membersToRemove} miembro(s) por menor antigüedad.
             </Text>
             {planGuardNotice.membersPreview.length > 0 && (
               <Text style={styles.guardWarningMembers}>

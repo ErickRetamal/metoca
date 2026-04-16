@@ -3,6 +3,8 @@ import { supabase } from '../supabase'
 
 let paywallAnalyticsDisabled = false
 
+export type PaywallEntryPoint = 'manage' | 'onboarding'
+
 async function logPaywallNavigationEvent(source: string) {
   if (paywallAnalyticsDisabled) {
     return
@@ -35,7 +37,10 @@ async function logPaywallNavigationEvent(source: string) {
 
 export function goToPlanChange(source: string) {
   void logPaywallNavigationEvent(source)
-  router.push('/(auth)/paywall')
+  router.push({
+    pathname: '/(auth)/paywall',
+    params: { source, entry: 'manage' satisfies PaywallEntryPoint },
+  })
 }
 
 export function goToPaywall(source: string = 'unknown') {

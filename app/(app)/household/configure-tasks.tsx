@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { router } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { Reveal } from '../../../components/ui/reveal'
@@ -144,6 +144,7 @@ export default function ConfigureHouseholdTasksScreen() {
   const [customTaskDayOfMonth, setCustomTaskDayOfMonth] = useState(1)
   const [customExtraWeeklySlots, setCustomExtraWeeklySlots] = useState<WeeklySlotDraft[]>([])
   const [screenFeedback, setScreenFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [redistributionStatus, setRedistributionStatus] = useState<string | null>(null)
 
   function getCurrentMonthKey(): string {
     const now = new Date()
@@ -520,9 +521,11 @@ export default function ConfigureHouseholdTasksScreen() {
     }
 
     setScreenFeedback(null)
+    setRedistributionStatus('Iniciando redistribución...')
 
     setRedistributing(true)
     try {
+      setRedistributionStatus('Reasignando pendientes y generando tareas desde hoy...')
       const currentMonth = getCurrentMonthKey()
       const { data, error } = await supabase.rpc('redistribute_household_tasks', {
         p_household_id: householdId,
@@ -533,26 +536,39 @@ export default function ConfigureHouseholdTasksScreen() {
         const msg = (error.message ?? '').toLowerCase()
         if (msg.includes('only_admin_can_redistribute')) {
           setScreenFeedback({ type: 'error', message: 'Solo el jefe de hogar puede redistribuir tareas.' })
+          setRedistributionStatus('No autorizado: solo el jefe de hogar puede redistribuir.')
           Alert.alert('Solo admin', 'Solo el jefe de hogar puede redistribuir tareas.')
           return
         }
         if (msg.includes('no_active_members')) {
           setScreenFeedback({ type: 'error', message: 'No hay miembros activos para distribuir tareas.' })
+          setRedistributionStatus('No hay miembros activos para realizar la redistribución.')
           Alert.alert('Sin miembros', 'No hay miembros activos para distribuir tareas.')
           return
         }
         setScreenFeedback({ type: 'error', message: error.message })
+        setRedistributionStatus(`Error: ${error.message}`)
         Alert.alert('Error al redistribuir', error.message)
         return
       }
 
       const created = Number((data as any)?.executions_created ?? 0)
       const moved = Number((data as any)?.pending_reassigned ?? 0)
+      const generationStart = String((data as any)?.generation_start ?? '')
+      const summary = `OK. Pendientes reasignadas: ${moved}. Nuevas ejecuciones: ${created}.`
 
       setScreenFeedback({
         type: 'success',
-        message: `OK. Pendientes reasignadas: ${moved}. Nuevas ejecuciones: ${created}.`,
+        message: summary,
       })
+      setRedistributionStatus(`Listo. ${summary}`)
+
+      Alert.alert(
+        'Redistribución completada',
+        generationStart
+          ? `${summary}\n\nDesde: ${generationStart}`
+          : summary
+      )
     } finally {
       setRedistributing(false)
     }
@@ -694,10 +710,17 @@ export default function ConfigureHouseholdTasksScreen() {
                   onPress={handleRedistributeTasksNow}
                   disabled={redistributing}
                 >
-                  <Text style={styles.primaryButtonText}>
-                    {redistributing ? 'Redistribuyendo...' : 'Redistribuir tareas ahora'}
-                  </Text>
+                  <View style={styles.redistributeButtonContent}>
+                    {redistributing && <ActivityIndicator size="small" color={Colors.surface} />}
+                    <Text style={styles.primaryButtonText}>
+                      {redistributing ? 'Redistribuyendo...' : 'Redistribuir tareas ahora'}
+                    </Text>
+                  </View>
                 </Pressable>
+
+                {redistributionStatus && (
+                  <Text style={styles.redistributionStatusText}>{redistributionStatus}</Text>
+                )}
               </View>
             </Reveal>
 
@@ -1355,8 +1378,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  redistributeButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  redistributionStatusText: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: Spacing.xs,
   },
   planHintBox: {
     borderRadius: BorderRadius.md,
