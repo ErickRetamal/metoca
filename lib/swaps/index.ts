@@ -1,4 +1,3 @@
-import { CURRENT_USER_ID } from '../dashboard'
 import { supabase } from '../supabase'
 import { SwapScope } from '../../types'
 import { firstNameOnly, nameFromEmail } from '../user-name'
@@ -50,25 +49,20 @@ function currentDateKey(): string {
   return `${year}-${month}-${day}`
 }
 
-const MOCK_SWAP_REQUESTS: SwapRecord[] = []
-
-const MOCK_USERS: Record<string, string> = {
-  u1: 'Ana',
-  u2: 'Pedro',
-  u3: 'Maria',
-}
-
-const MOCK_EXECUTIONS: Record<string, SwapExecutionOption> = {
-  e2: { executionId: 'e2', taskName: 'Lavar la ropa', scheduledTime: '15:00', assignedTo: 'u1', assignedToName: 'Ana' },
-  e3: { executionId: 'e3', taskName: 'Pasar aspiradora', scheduledTime: '18:00', assignedTo: 'u1', assignedToName: 'Ana' },
-  e5: { executionId: 'e5', taskName: 'Ordenar living', scheduledTime: '19:00', assignedTo: 'u2', assignedToName: 'Pedro' },
-  e6: { executionId: 'e6', taskName: 'Lavar platos', scheduledTime: '14:00', assignedTo: 'u3', assignedToName: 'Maria' },
-  e7: { executionId: 'e7', taskName: 'Barrer cocina', scheduledTime: '17:30', assignedTo: 'u3', assignedToName: 'Maria' },
+function createEmptySwapRequestData(): SwapRequestData {
+  return {
+    myTasks: [],
+    memberOptions: [],
+  }
 }
 
 async function getCurrentUserId(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
-  return user?.id ?? CURRENT_USER_ID
+  if (!user?.id) {
+    throw new Error('No hay sesión activa.')
+  }
+
+  return user.id
 }
 
 async function getCurrentHouseholdId(userId: string): Promise<string | null> {
@@ -83,88 +77,69 @@ async function getCurrentHouseholdId(userId: string): Promise<string | null> {
   return data?.household_id ?? null
 }
 
-function getMockRequestData(): SwapRequestData {
-  return {
-    myTasks: [MOCK_EXECUTIONS.e2, MOCK_EXECUTIONS.e3],
-    memberOptions: [
-      {
-        memberId: 'u2',
-        memberName: 'Pedro',
-        tasks: [MOCK_EXECUTIONS.e5],
-      },
-      {
-        memberId: 'u3',
-        memberName: 'Maria',
-        tasks: [MOCK_EXECUTIONS.e6, MOCK_EXECUTIONS.e7],
-      },
-    ],
-  }
-}
-
 export async function getSwapRequestData(): Promise<SwapRequestData> {
-  try {
-    const currentUserId = await getCurrentUserId()
-    const householdId = await getCurrentHouseholdId(currentUserId)
-    const today = currentDateKey()
+  const currentUserId = await getCurrentUserId()
+  const householdId = await getCurrentHouseholdId(currentUserId)
+  const today = currentDateKey()
 
-    if (!householdId) {
-      return getMockRequestData()
-    }
+  if (!householdId) {
+    return createEmptySwapRequestData()
+  }
 
-    const { data: memberRows, error: memberError } = await supabase
-      .from('household_members')
-      .select('user_id, users(name, email)')
-      .eq('household_id', householdId)
-      .eq('status', 'active')
+  const { data: memberRows, error: memberError } = await supabase
+    .from('household_members')
+    .select('user_id, users(name, email)')
+    .eq('household_id', householdId)
+    .eq('status', 'active')
 
-    if (memberError || !memberRows) {
-      return getMockRequestData()
-    }
+  if (memberError || !memberRows) {
+    throw new Error(memberError?.message ?? 'No pudimos cargar los miembros del hogar.')
+  }
 
-    const members = memberRows.map((row: any) => ({
-      id: row.user_id,
-      name: firstNameOnly(row.users?.name ?? nameFromEmail(row.users?.email), 'Miembro'),
+  const members = memberRows.map((row: any) => ({
+    id: row.user_id,
+    name: firstNameOnly(row.users?.name ?? nameFromEmail(row.users?.email), 'Miembro'),
+  }))
+
+  const memberIds = members.map(member => member.id)
+  if (memberIds.length === 0) {
+    return createEmptySwapRequestData()
+  }
+
+  const { data: executionRows, error: executionsError } = await supabase
+    .from('task_executions')
+    .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name)')
+    .in('assigned_to', memberIds)
+    .eq('scheduled_date', today)
+    .eq('status', 'pending')
+
+  if (executionsError || !executionRows) {
+    throw new Error(executionsError?.message ?? 'No pudimos cargar las tareas intercambiables.')
+  }
+
+  const taskOptions: SwapExecutionOption[] = executionRows.map((row: any) => ({
+    executionId: row.id,
+    taskName: row.tasks?.name ?? 'Tarea',
+    scheduledTime: row.scheduled_time,
+    assignedTo: row.assigned_to,
+    assignedToName: members.find(member => member.id === row.assigned_to)?.name ?? 'Miembro',
+  }))
+
+  const myTasks = taskOptions.filter(task => task.assignedTo === currentUserId)
+  const memberOptions = members
+    .filter(member => member.id !== currentUserId)
+    .map(member => ({
+      memberId: member.id,
+      memberName: member.name,
+      tasks: taskOptions
+        .filter(task => task.assignedTo === member.id)
+        .sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime)),
     }))
+    .filter(member => member.tasks.length > 0)
 
-    const memberIds = members.map(member => member.id)
-
-    const { data: executionRows, error: executionsError } = await supabase
-      .from('task_executions')
-      .select('id, assigned_to, scheduled_date, scheduled_time, status, tasks(name)')
-      .in('assigned_to', memberIds)
-      .eq('scheduled_date', today)
-      .eq('status', 'pending')
-
-    if (executionsError || !executionRows) {
-      return getMockRequestData()
-    }
-
-    const taskOptions: SwapExecutionOption[] = executionRows.map((row: any) => ({
-      executionId: row.id,
-      taskName: row.tasks?.name ?? 'Tarea',
-      scheduledTime: row.scheduled_time,
-      assignedTo: row.assigned_to,
-      assignedToName: members.find(member => member.id === row.assigned_to)?.name ?? 'Miembro',
-    }))
-
-    const myTasks = taskOptions.filter(task => task.assignedTo === currentUserId)
-    const memberOptions = members
-      .filter(member => member.id !== currentUserId)
-      .map(member => ({
-        memberId: member.id,
-        memberName: member.name,
-        tasks: taskOptions
-          .filter(task => task.assignedTo === member.id)
-          .sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime)),
-      }))
-      .filter(member => member.tasks.length > 0)
-
-    return {
-      myTasks,
-      memberOptions,
-    }
-  } catch {
-    return getMockRequestData()
+  return {
+    myTasks,
+    memberOptions,
   }
 }
 
@@ -173,166 +148,134 @@ export async function createTaskSwapRequest(input: {
   targetExecutionId: string
   scope: SwapScope
 }): Promise<void> {
-  try {
-    const currentUserId = await getCurrentUserId()
+  const currentUserId = await getCurrentUserId()
 
-    const { data: targetExecution, error: targetExecutionError } = await supabase
-      .from('task_executions')
-      .select('assigned_to')
-      .eq('id', input.targetExecutionId)
-      .maybeSingle()
+  const { data: targetExecution, error: targetExecutionError } = await supabase
+    .from('task_executions')
+    .select('assigned_to')
+    .eq('id', input.targetExecutionId)
+    .maybeSingle()
 
-    if (targetExecutionError || !targetExecution?.assigned_to) {
-      throw new Error('No se pudo determinar el usuario destino.')
-    }
+  if (targetExecutionError || !targetExecution?.assigned_to) {
+    throw new Error('No se pudo determinar el usuario destino.')
+  }
 
-    const { error } = await supabase
-      .from('task_swaps')
-      .insert({
-        requester_id: currentUserId,
-        target_id: targetExecution.assigned_to,
-        requester_execution_id: input.requesterExecutionId,
-        target_execution_id: input.targetExecutionId,
-        scope: input.scope,
-        status: 'pending',
-      })
-
-    if (error) {
-      throw error
-    }
-  } catch {
-    MOCK_SWAP_REQUESTS.unshift({
-      id: `mock-${Date.now()}`,
-      requester_id: CURRENT_USER_ID,
-      target_id: MOCK_EXECUTIONS[input.targetExecutionId]?.assignedTo ?? 'u2',
+  const { error } = await supabase
+    .from('task_swaps')
+    .insert({
+      requester_id: currentUserId,
+      target_id: targetExecution.assigned_to,
       requester_execution_id: input.requesterExecutionId,
       target_execution_id: input.targetExecutionId,
       scope: input.scope,
       status: 'pending',
-      requested_at: new Date().toISOString(),
     })
+
+  if (error) {
+    throw new Error(error.message)
   }
 }
 
-function mapIncomingRecordsToUi(records: SwapRecord[]): IncomingSwapRequest[] {
+function mapIncomingRecordsToUi(records: SwapRecord[], usersMap: Map<string, string>, executionsMap: Map<string, string>): IncomingSwapRequest[] {
   return records.map(record => ({
     id: record.id,
-    requesterName: MOCK_USERS[record.requester_id] ?? 'Miembro',
-    requesterTaskName: record.requester_execution_id ? MOCK_EXECUTIONS[record.requester_execution_id]?.taskName ?? 'Tarea' : 'Sin tarea',
-    targetTaskName: MOCK_EXECUTIONS[record.target_execution_id]?.taskName ?? 'Tarea',
+    requesterName: usersMap.get(record.requester_id) ?? 'Miembro',
+    requesterTaskName: record.requester_execution_id ? executionsMap.get(record.requester_execution_id) ?? 'Tarea' : 'Sin tarea',
+    targetTaskName: executionsMap.get(record.target_execution_id) ?? 'Tarea',
     requestedAt: record.requested_at,
     scope: record.scope,
   }))
 }
 
 export async function getIncomingSwapRequests(): Promise<IncomingSwapRequest[]> {
-  try {
-    const currentUserId = await getCurrentUserId()
+  const currentUserId = await getCurrentUserId()
 
-    const { data: rows, error } = await supabase
-      .from('task_swaps')
-      .select('id, requester_id, target_id, requester_execution_id, target_execution_id, scope, status, requested_at')
-      .eq('target_id', currentUserId)
-      .eq('status', 'pending')
-      .order('requested_at', { ascending: false })
+  const { data: rows, error } = await supabase
+    .from('task_swaps')
+    .select('id, requester_id, target_id, requester_execution_id, target_execution_id, scope, status, requested_at')
+    .eq('target_id', currentUserId)
+    .eq('status', 'pending')
+    .order('requested_at', { ascending: false })
 
-    if (error || !rows || rows.length === 0) {
-      return mapIncomingRecordsToUi(
-        MOCK_SWAP_REQUESTS.filter(item => item.target_id === CURRENT_USER_ID && item.status === 'pending')
-      )
-    }
-
-    const requesterIds = [...new Set(rows.map((row: any) => row.requester_id))]
-    const executionIds = [...new Set(rows.flatMap((row: any) => [row.requester_execution_id, row.target_execution_id].filter(Boolean)))]
-
-    const [{ data: usersRows }, { data: executionRows }] = await Promise.all([
-      supabase.from('users').select('id, name, email').in('id', requesterIds),
-      supabase.from('task_executions').select('id, tasks(name)').in('id', executionIds as string[]),
-    ])
-
-    const usersMap = new Map<string, string>()
-    usersRows?.forEach((row: any) => {
-      usersMap.set(row.id, firstNameOnly(row.name ?? nameFromEmail(row.email), 'Miembro'))
-    })
-
-    const executionsMap = new Map<string, string>()
-    executionRows?.forEach((row: any) => {
-      executionsMap.set(row.id, row.tasks?.name ?? 'Tarea')
-    })
-
-    return rows.map((row: any) => ({
-      id: row.id,
-      requesterName: usersMap.get(row.requester_id) ?? 'Miembro',
-      requesterTaskName: row.requester_execution_id ? executionsMap.get(row.requester_execution_id) ?? 'Tarea' : 'Sin tarea',
-      targetTaskName: executionsMap.get(row.target_execution_id) ?? 'Tarea',
-      requestedAt: row.requested_at,
-      scope: row.scope,
-    }))
-  } catch {
-    return mapIncomingRecordsToUi(
-      MOCK_SWAP_REQUESTS.filter(item => item.target_id === CURRENT_USER_ID && item.status === 'pending')
-    )
+  if (error) {
+    throw new Error(error.message)
   }
+
+  if (!rows || rows.length === 0) {
+    return []
+  }
+
+  const requesterIds = [...new Set(rows.map((row: any) => row.requester_id))]
+  const executionIds = [...new Set(rows.flatMap((row: any) => [row.requester_execution_id, row.target_execution_id].filter(Boolean)))]
+
+  const [{ data: usersRows, error: usersError }, { data: executionRows, error: executionsError }] = await Promise.all([
+    supabase.from('users').select('id, name, email').in('id', requesterIds),
+    supabase.from('task_executions').select('id, tasks(name)').in('id', executionIds as string[]),
+  ])
+
+  if (usersError || executionsError) {
+    throw new Error(usersError?.message ?? executionsError?.message ?? 'No se pudieron cargar los detalles del intercambio.')
+  }
+
+  const usersMap = new Map<string, string>()
+  usersRows?.forEach((row: any) => {
+    usersMap.set(row.id, firstNameOnly(row.name ?? nameFromEmail(row.email), 'Miembro'))
+  })
+
+  const executionsMap = new Map<string, string>()
+  executionRows?.forEach((row: any) => {
+    executionsMap.set(row.id, row.tasks?.name ?? 'Tarea')
+  })
+
+  return mapIncomingRecordsToUi(rows as SwapRecord[], usersMap, executionsMap)
 }
 
 export async function respondToSwapRequest(swapId: string, decision: 'accepted' | 'rejected'): Promise<void> {
-  try {
-    const { error: rpcError } = await supabase.rpc('respond_task_swap', {
-      p_swap_id: swapId,
-      p_decision: decision,
-    })
+  const { error: rpcError } = await supabase.rpc('respond_task_swap', {
+    p_swap_id: swapId,
+    p_decision: decision,
+  })
 
-    if (!rpcError) {
-      return
+  if (!rpcError) {
+    return
+  }
+
+  const { data: swap, error: swapError } = await supabase
+    .from('task_swaps')
+    .select('id, requester_id, target_id, requester_execution_id, target_execution_id, scope, status')
+    .eq('id', swapId)
+    .maybeSingle()
+
+  if (swapError || !swap) {
+    throw new Error(swapError?.message ?? 'No se encontró la solicitud.')
+  }
+
+  if (decision === 'accepted' && swap.requester_execution_id) {
+    const [{ data: requesterExecution }, { data: targetExecution }] = await Promise.all([
+      supabase.from('task_executions').select('assigned_to').eq('id', swap.requester_execution_id).maybeSingle(),
+      supabase.from('task_executions').select('assigned_to').eq('id', swap.target_execution_id).maybeSingle(),
+    ])
+
+    if (requesterExecution?.assigned_to && targetExecution?.assigned_to) {
+      await Promise.all([
+        supabase
+          .from('task_executions')
+          .update({ assigned_to: targetExecution.assigned_to })
+          .eq('id', swap.requester_execution_id),
+        supabase
+          .from('task_executions')
+          .update({ assigned_to: requesterExecution.assigned_to })
+          .eq('id', swap.target_execution_id),
+      ])
     }
+  }
 
-    const { data: swap, error: swapError } = await supabase
-      .from('task_swaps')
-      .select('id, requester_id, target_id, requester_execution_id, target_execution_id, scope, status')
-      .eq('id', swapId)
-      .maybeSingle()
+  const { error: updateError } = await supabase
+    .from('task_swaps')
+    .update({ status: decision, resolved_at: new Date().toISOString() })
+    .eq('id', swapId)
 
-    if (swapError || !swap) {
-      throw new Error('No se encontro la solicitud.')
-    }
-
-    if (decision === 'accepted') {
-      if (swap.requester_execution_id) {
-        const [{ data: requesterExecution }, { data: targetExecution }] = await Promise.all([
-          supabase.from('task_executions').select('assigned_to').eq('id', swap.requester_execution_id).maybeSingle(),
-          supabase.from('task_executions').select('assigned_to').eq('id', swap.target_execution_id).maybeSingle(),
-        ])
-
-        if (requesterExecution?.assigned_to && targetExecution?.assigned_to) {
-          await Promise.all([
-            supabase
-              .from('task_executions')
-              .update({ assigned_to: targetExecution.assigned_to })
-              .eq('id', swap.requester_execution_id),
-            supabase
-              .from('task_executions')
-              .update({ assigned_to: requesterExecution.assigned_to })
-              .eq('id', swap.target_execution_id),
-          ])
-        }
-      }
-    }
-
-    const { error: updateError } = await supabase
-      .from('task_swaps')
-      .update({ status: decision, resolved_at: new Date().toISOString() })
-      .eq('id', swapId)
-
-    if (updateError) {
-      throw updateError
-    }
-  } catch {
-    const index = MOCK_SWAP_REQUESTS.findIndex(item => item.id === swapId)
-    if (index !== -1) {
-      MOCK_SWAP_REQUESTS[index] = {
-        ...MOCK_SWAP_REQUESTS[index],
-        status: decision,
-      }
-    }
+  if (updateError) {
+    throw new Error(updateError.message)
   }
 }

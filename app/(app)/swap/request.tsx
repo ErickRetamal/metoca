@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { router } from 'expo-router'
 import { BorderRadius, Colors, Spacing, ShadowPresets } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Reveal } from '../../../components/ui/reveal'
 import { createTaskSwapRequest, getSwapRequestData, SwapExecutionOption, SwapMemberOptions } from '../../../lib/swaps'
 import { SwapScope } from '../../../types'
@@ -26,10 +27,15 @@ export default function SwapRequestScreen() {
     let mounted = true
 
     async function loadOptions() {
-      const data = await getSwapRequestData()
-      if (!mounted) return
-      setMyTasks(data.myTasks)
-      setMemberOptions(data.memberOptions)
+      try {
+        const data = await getSwapRequestData()
+        if (!mounted) return
+        setMyTasks(data.myTasks)
+        setMemberOptions(data.memberOptions)
+      } catch (error) {
+        if (!mounted) return
+        Alert.alert('No se pudieron cargar los intercambios', error instanceof Error ? error.message : 'Intenta nuevamente.')
+      }
     }
 
     loadOptions()
@@ -51,16 +57,21 @@ export default function SwapRequestScreen() {
     }
 
     setSaving(true)
-    await createTaskSwapRequest({
-      requesterExecutionId: selectedMyExecutionId,
-      targetExecutionId: selectedTargetExecutionId,
-      scope,
-    })
-    setSaving(false)
+    try {
+      await createTaskSwapRequest({
+        requesterExecutionId: selectedMyExecutionId,
+        targetExecutionId: selectedTargetExecutionId,
+        scope,
+      })
 
-    Alert.alert('Solicitud enviada', 'El otro miembro recibira la solicitud para aceptar o rechazar.')
-    setSelectedMyExecutionId(null)
-    setSelectedTargetExecutionId(null)
+      Alert.alert('Solicitud enviada', 'El otro miembro recibira la solicitud para aceptar o rechazar.')
+      setSelectedMyExecutionId(null)
+      setSelectedTargetExecutionId(null)
+    } catch (error) {
+      Alert.alert('No se pudo enviar', error instanceof Error ? error.message : 'Intenta nuevamente.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -76,61 +87,77 @@ export default function SwapRequestScreen() {
 
       <Reveal delay={90}>
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>1) Tu tarea para ceder</Text>
-          {myTasks.map(task => (
-            <Pressable
-              key={task.executionId}
-              style={[
-                styles.optionRow,
-                selectedMyExecutionId === task.executionId && styles.optionRowSelected,
-              ]}
-              onPress={() => setSelectedMyExecutionId(task.executionId)}
-            >
-              <Text style={styles.optionName}>{task.taskName}</Text>
-              <Text style={styles.optionTime}>{task.scheduledTime}</Text>
-            </Pressable>
-          ))}
+          <CollapsibleCard
+            title="1) Tu tarea para ceder"
+            subtitle="Elige cuál de tus tareas quieres intercambiar."
+            defaultExpanded={true}
+            forceExpanded={selectedMyExecutionId !== null}
+          >
+            {myTasks.map(task => (
+              <Pressable
+                key={task.executionId}
+                style={[
+                  styles.optionRow,
+                  selectedMyExecutionId === task.executionId && styles.optionRowSelected,
+                ]}
+                onPress={() => setSelectedMyExecutionId(task.executionId)}
+              >
+                <Text style={styles.optionName}>{task.taskName}</Text>
+                <Text style={styles.optionTime}>{task.scheduledTime}</Text>
+              </Pressable>
+            ))}
+          </CollapsibleCard>
         </View>
       </Reveal>
 
       <Reveal delay={100}>
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>2) Tarea que tomas a cambio</Text>
-          {memberOptions.map(member => (
-            <View key={member.memberId} style={styles.memberBlock}>
-              <Text style={styles.memberTitle}>{member.memberName}</Text>
-              {member.tasks.map(task => (
-                <Pressable
-                  key={task.executionId}
-                  style={[
-                    styles.optionRow,
-                    selectedTargetExecutionId === task.executionId && styles.optionRowSelected,
-                  ]}
-                  onPress={() => setSelectedTargetExecutionId(task.executionId)}
-                >
-                  <Text style={styles.optionName}>{task.taskName}</Text>
-                  <Text style={styles.optionTime}>{task.scheduledTime}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ))}
+          <CollapsibleCard
+            title="2) Tarea que tomas a cambio"
+            subtitle="Selecciona una tarea de otro miembro del hogar."
+            forceExpanded={selectedTargetExecutionId !== null}
+          >
+            {memberOptions.map(member => (
+              <View key={member.memberId} style={styles.memberBlock}>
+                <Text style={styles.memberTitle}>{member.memberName}</Text>
+                {member.tasks.map(task => (
+                  <Pressable
+                    key={task.executionId}
+                    style={[
+                      styles.optionRow,
+                      selectedTargetExecutionId === task.executionId && styles.optionRowSelected,
+                    ]}
+                    onPress={() => setSelectedTargetExecutionId(task.executionId)}
+                  >
+                    <Text style={styles.optionName}>{task.taskName}</Text>
+                    <Text style={styles.optionTime}>{task.scheduledTime}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ))}
+          </CollapsibleCard>
         </View>
       </Reveal>
 
       <Reveal delay={110}>
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>3) Alcance</Text>
-          <View style={styles.scopeRow}>
-            {SCOPES.map(item => (
-              <Pressable
-                key={item}
-                style={[styles.scopeChip, scope === item && styles.scopeChipSelected]}
-                onPress={() => setScope(item)}
-              >
-                <Text style={[styles.scopeChipText, scope === item && styles.scopeChipTextSelected]}>{scopeLabel(item)}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <CollapsibleCard
+            title="3) Alcance"
+            subtitle="Define si el intercambio aplica al día, semana o mes."
+            defaultExpanded={true}
+          >
+            <View style={styles.scopeRow}>
+              {SCOPES.map(item => (
+                <Pressable
+                  key={item}
+                  style={[styles.scopeChip, scope === item && styles.scopeChipSelected]}
+                  onPress={() => setScope(item)}
+                >
+                  <Text style={[styles.scopeChipText, scope === item && styles.scopeChipTextSelected]}>{scopeLabel(item)}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </CollapsibleCard>
         </View>
       </Reveal>
 

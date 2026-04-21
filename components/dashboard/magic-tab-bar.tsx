@@ -88,7 +88,7 @@ export function MagicTabBar({ state, descriptors, navigation, canManageTasks = f
         if (HIDDEN_TAB_ROUTES.has(route.name)) return false
         if (route.name === 'tasks' && !canManageTasks) return false
         const options = descriptors[route.key]?.options
-        return options?.href !== null
+        return (options as { href?: string | null } | undefined)?.href !== null
       }),
     [state.routes, descriptors, canManageTasks]
   )
@@ -206,7 +206,7 @@ export function MagicTabBar({ state, descriptors, navigation, canManageTasks = f
             }
 
             const iconName = resolveIconName(route.name, focused)
-            const tintColor = focused ? 'transparent' : '#685345'
+            const tintColor = '#685345'
             const accessibilityLabel = options.tabBarAccessibilityLabel ?? options.title ?? route.name
 
             return (
@@ -231,7 +231,7 @@ export function MagicTabBar({ state, descriptors, navigation, canManageTasks = f
                 }}
               >
                 <Animated.View style={[styles.iconWrap, { transform: [{ scale: routeIndex >= 0 ? iconScale[routeIndex] : 1 }] }]}>
-                  <Ionicons name={iconName} size={21} color={tintColor} />
+                  {!focused && <Ionicons name={iconName} size={21} color={tintColor} />}
                 </Animated.View>
               </Pressable>
             )

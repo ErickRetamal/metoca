@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Stack, router } from 'expo-router'
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { initializePurchases } from '../lib/purchases'
 
@@ -19,15 +20,19 @@ export default function RootLayout() {
   }, [])
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade',
-        contentStyle: { backgroundColor: 'transparent' },
-      }}
-    >
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(app)" />
-    </Stack>
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        >
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(app)" />
+        </Stack>
+      </SafeAreaView>
+    </SafeAreaProvider>
   )
 }

@@ -339,7 +339,7 @@ export async function getMyTodayTasksAsync(): Promise<DashboardTaskExecution[]> 
     .order('scheduled_time', { ascending: true })
 
   if (error || !data) {
-    return getMyTodayTasks()
+    return []
   }
 
   return normalizeTaskRows(data)
@@ -380,7 +380,7 @@ export async function markTaskAsCompletedAsync(taskExecutionId: string): Promise
     .eq('id', taskExecutionId)
 
   if (error) {
-    return markMyTaskAsCompleted(taskExecutionId)
+    throw new Error(error.message)
   }
 
   return getMyTodayTasksAsync()
@@ -391,7 +391,7 @@ export async function getMonthTasksAsync(monthOffset: number, userId?: string): 
   const targetUserId = userId ?? context.currentUserId
 
   if (!context.householdId) {
-    return getMockMonthTasks(monthOffset, targetUserId)
+    return []
   }
 
   const { start, end } = dateRangeFromMonthOffset(monthOffset)
@@ -407,7 +407,7 @@ export async function getMonthTasksAsync(monthOffset: number, userId?: string): 
     .order('scheduled_date', { ascending: true })
 
   if (error || !data) {
-    return getMockMonthTasks(monthOffset, targetUserId)
+    return []
   }
 
   return normalizeTaskRows(data)
@@ -495,7 +495,18 @@ export async function getHouseholdMonthSummaryAsync(monthOffset: number) {
     .is('tasks.deleted_at', null)
 
   if (error || !data) {
-    return getHouseholdMonthSummary(monthOffset)
+    return {
+      monthKey,
+      byMember: context.members.map(member => ({
+        member,
+        assigned: 0,
+        completed: 0,
+        completionRate: 0,
+      })),
+      totalAssigned: 0,
+      totalCompleted: 0,
+      completionRate: 0,
+    }
   }
 
   const tasks = normalizeTaskRows(data)
@@ -529,12 +540,12 @@ export async function getHouseholdMonthTasksAsync(monthOffset: number): Promise<
   const context = await resolveContext()
 
   if (!context.householdId) {
-    return getMockHouseholdMonthTasks()
+    return []
   }
 
   const memberIds = context.members.map(member => member.id)
   if (memberIds.length === 0) {
-    return getMockHouseholdMonthTasks()
+    return []
   }
 
   const { start, end } = dateRangeFromMonthOffset(monthOffset)
@@ -551,7 +562,7 @@ export async function getHouseholdMonthTasksAsync(monthOffset: number): Promise<
     .order('scheduled_time', { ascending: true })
 
   if (error || !data) {
-    return getMockHouseholdMonthTasks()
+    return []
   }
 
   const memberNameById = new Map(context.members.map(member => [member.id, member.name]))

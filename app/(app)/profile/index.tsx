@@ -7,6 +7,8 @@ import { useMenuContext } from '../../../lib/menu-context'
 import { supabase } from '../../../lib/supabase'
 import { CURRENT_PLAN, getCurrentOwnedPlanAsync, getCurrentPlanAsync } from '../../../lib/dashboard'
 import { goToPaywall } from '../../../lib/navigation'
+import { resetPurchaseUser } from '../../../lib/purchases'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { SubscriptionPlan } from '../../../types'
 import { Reveal } from '../../../components/ui/reveal'
 import { Skeleton } from '../../../components/ui/skeleton'
@@ -174,6 +176,7 @@ export default function ProfileScreen() {
 
     setSigningOut(true)
     try {
+      await resetPurchaseUser().catch(() => undefined)
       const { error } = await supabase.auth.signOut({ scope: 'local' })
 
       if (error) {
@@ -337,150 +340,154 @@ export default function ProfileScreen() {
 
         <Reveal delay={90}>
         <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Cuenta</Text>
-
-            {!isEditing ? (
-              <Pressable style={styles.editButton} onPress={() => setIsEditing(true)}>
-                <Text style={styles.editButtonText}>Editar</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={styles.cancelEditButton} onPress={handleCancelEdit}>
-                <Text style={styles.cancelEditButtonText}>Cancelar</Text>
-              </Pressable>
-            )}
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Correo</Text>
-            <Text style={styles.infoValue}>{email || '-'}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Nombre</Text>
-            {isEditing ? (
-              <TextInput
-                style={styles.editInput}
-                value={draftFirstName}
-                onChangeText={setDraftFirstName}
-                placeholder="Nombre"
-                placeholderTextColor={Colors.muted}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-            ) : (
-              <Text style={styles.infoValue}>{firstName || '-'}</Text>
-            )}
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Apellido</Text>
-            {isEditing ? (
-              <TextInput
-                style={styles.editInput}
-                value={draftLastName}
-                onChangeText={setDraftLastName}
-                placeholder="Apellido"
-                placeholderTextColor={Colors.muted}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-            ) : (
-              <Text style={styles.infoValue}>{lastName || '-'}</Text>
-            )}
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Genero</Text>
-            {isEditing ? (
-              <View style={styles.genderRow}>
-                <Pressable
-                  style={[styles.genderChip, draftGender === 'femenino' && styles.genderChipActive]}
-                  onPress={() => setDraftGender('femenino')}
-                >
-                  <Text style={[styles.genderChipText, draftGender === 'femenino' && styles.genderChipTextActive]}>Femenino</Text>
+          <CollapsibleCard
+            title="Cuenta"
+            subtitle="Datos personales, plan y acceso a tu hogar."
+            forceExpanded={isEditing}
+          >
+            <View style={styles.sectionHeader}>
+              {!isEditing ? (
+                <Pressable style={styles.editButton} onPress={() => setIsEditing(true)}>
+                  <Text style={styles.editButtonText}>Editar</Text>
                 </Pressable>
-                <Pressable
-                  style={[styles.genderChip, draftGender === 'masculino' && styles.genderChipActive]}
-                  onPress={() => setDraftGender('masculino')}
-                >
-                  <Text style={[styles.genderChipText, draftGender === 'masculino' && styles.genderChipTextActive]}>Masculino</Text>
+              ) : (
+                <Pressable style={styles.cancelEditButton} onPress={handleCancelEdit}>
+                  <Text style={styles.cancelEditButtonText}>Cancelar</Text>
                 </Pressable>
-                <Pressable
-                  style={[styles.genderChip, draftGender === 'otro' && styles.genderChipActive]}
-                  onPress={() => setDraftGender('otro')}
-                >
-                  <Text style={[styles.genderChipText, draftGender === 'otro' && styles.genderChipTextActive]}>Otro</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <Text style={styles.infoValue}>{getGenderLabel(gender)}</Text>
-            )}
-          </View>
+              )}
+            </View>
 
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Inicial avatar</Text>
-            {isEditing ? (
-              <TextInput
-                style={styles.editInput}
-                value={draftAvatarInitial}
-                onChangeText={value => setDraftAvatarInitial(normalizeAvatarInitial(value, displayName))}
-                placeholder="Inicial"
-                placeholderTextColor={Colors.muted}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                maxLength={1}
-              />
-            ) : (
-              <Text style={styles.infoValue}>{avatarInitial}</Text>
-            )}
-          </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Correo</Text>
+              <Text style={styles.infoValue}>{email || '-'}</Text>
+            </View>
 
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Color avatar</Text>
-            {isEditing ? (
-              <View style={styles.avatarColorRow}>
-                {AVATAR_COLORS.map(color => (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Nombre</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.editInput}
+                  value={draftFirstName}
+                  onChangeText={setDraftFirstName}
+                  placeholder="Nombre"
+                  placeholderTextColor={Colors.muted}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              ) : (
+                <Text style={styles.infoValue}>{firstName || '-'}</Text>
+              )}
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Apellido</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.editInput}
+                  value={draftLastName}
+                  onChangeText={setDraftLastName}
+                  placeholder="Apellido"
+                  placeholderTextColor={Colors.muted}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              ) : (
+                <Text style={styles.infoValue}>{lastName || '-'}</Text>
+              )}
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Genero</Text>
+              {isEditing ? (
+                <View style={styles.genderRow}>
                   <Pressable
-                    key={color}
-                    style={[
-                      styles.avatarColorChip,
-                      { backgroundColor: color },
-                      draftAvatarColor === color && styles.avatarColorChipActive,
-                    ]}
-                    onPress={() => setDraftAvatarColor(color)}
-                  />
-                ))}
-              </View>
-            ) : (
-              <View style={[styles.avatarColorPreview, { backgroundColor: avatarColor }]} />
-            )}
-          </View>
+                    style={[styles.genderChip, draftGender === 'femenino' && styles.genderChipActive]}
+                    onPress={() => setDraftGender('femenino')}
+                  >
+                    <Text style={[styles.genderChipText, draftGender === 'femenino' && styles.genderChipTextActive]}>Femenino</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.genderChip, draftGender === 'masculino' && styles.genderChipActive]}
+                    onPress={() => setDraftGender('masculino')}
+                  >
+                    <Text style={[styles.genderChipText, draftGender === 'masculino' && styles.genderChipTextActive]}>Masculino</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.genderChip, draftGender === 'otro' && styles.genderChipActive]}
+                    onPress={() => setDraftGender('otro')}
+                  >
+                    <Text style={[styles.genderChipText, draftGender === 'otro' && styles.genderChipTextActive]}>Otro</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.infoValue}>{getGenderLabel(gender)}</Text>
+              )}
+            </View>
 
-          <Pressable style={styles.infoRow} onPress={() => goToPaywall('profile-subscription-row')}>
-            <Text style={styles.infoLabel}>Mi suscripcion</Text>
-            <Text style={styles.infoValue}>{getPlanLabel(plan)}</Text>
-          </Pressable>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Inicial avatar</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.editInput}
+                  value={draftAvatarInitial}
+                  onChangeText={value => setDraftAvatarInitial(normalizeAvatarInitial(value, displayName))}
+                  placeholder="Inicial"
+                  placeholderTextColor={Colors.muted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={1}
+                />
+              ) : (
+                <Text style={styles.infoValue}>{avatarInitial}</Text>
+              )}
+            </View>
 
-          <Pressable style={styles.infoRow} onPress={() => router.push('/(app)/household')}>
-            <Text style={styles.infoLabel}>Mi hogar</Text>
-            <Text style={styles.infoValue}>
-              {isInHousehold ? getHouseholdLabel(householdName, householdPlan) : 'No vinculado'}
-            </Text>
-          </Pressable>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Color avatar</Text>
+              {isEditing ? (
+                <View style={styles.avatarColorRow}>
+                  {AVATAR_COLORS.map(color => (
+                    <Pressable
+                      key={color}
+                      style={[
+                        styles.avatarColorChip,
+                        { backgroundColor: color },
+                        draftAvatarColor === color && styles.avatarColorChipActive,
+                      ]}
+                      onPress={() => setDraftAvatarColor(color)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={[styles.avatarColorPreview, { backgroundColor: avatarColor }]} />
+              )}
+            </View>
 
-          {isEditing && (
-            <Pressable
-              style={[styles.saveButton, savingProfile && styles.saveButtonDisabled]}
-              onPress={handleSaveProfile}
-              disabled={savingProfile}
-            >
-              {savingProfile
-                ? <ActivityIndicator color={Colors.text.inverse} />
-                : <Text style={styles.saveButtonText}>Guardar cambios</Text>
-              }
+            <Pressable style={styles.infoRow} onPress={() => goToPaywall('profile-subscription-row')}>
+              <Text style={styles.infoLabel}>Mi suscripcion</Text>
+              <Text style={styles.infoValue}>{getPlanLabel(plan)}</Text>
             </Pressable>
-          )}
+
+            <Pressable style={styles.infoRow} onPress={() => router.push('/(app)/household')}>
+              <Text style={styles.infoLabel}>Mi hogar</Text>
+              <Text style={styles.infoValue}>
+                {isInHousehold ? getHouseholdLabel(householdName, householdPlan) : 'No vinculado'}
+              </Text>
+            </Pressable>
+
+            {isEditing && (
+              <Pressable
+                style={[styles.saveButton, savingProfile && styles.saveButtonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile
+                  ? <ActivityIndicator color={Colors.text.inverse} />
+                  : <Text style={styles.saveButtonText}>Guardar cambios</Text>
+                }
+              </Pressable>
+            )}
+          </CollapsibleCard>
         </View>
         </Reveal>
 

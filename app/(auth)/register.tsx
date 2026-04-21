@@ -11,6 +11,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -28,6 +30,16 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const isSubmittingRef = useRef(false)
+  const imageOpacity = useRef(new Animated.Value(0)).current
+
+  const handleImageLoad = () => {
+    Animated.timing(imageOpacity, {
+      toValue: 1,
+      duration: 400,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start()
+  }
 
   const handleRegister = async () => {
     if (isSubmittingRef.current) return
@@ -89,7 +101,9 @@ export default function RegisterScreen() {
       return
     }
 
-    await identifyPurchaseUser(data.user.id).catch(() => undefined)
+    if (data.user?.id) {
+      await identifyPurchaseUser(data.user.id).catch(() => undefined)
+    }
 
     router.replace('/(auth)/push-permission')
   }
@@ -100,10 +114,11 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <StatusBar style="dark" />
-      <Image
+      <Animated.Image
         source={require('../../assets/images/onboarding/register.png.png')}
-        style={styles.photoBg}
+        style={[styles.photoBg, { opacity: imageOpacity }]}
         resizeMode="cover"
+        onLoad={handleImageLoad}
       />
       <View style={styles.photoVeil} />
 

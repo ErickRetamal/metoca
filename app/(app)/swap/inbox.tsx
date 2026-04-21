@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { BorderRadius, Colors, Spacing, ShadowPresets } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Reveal } from '../../../components/ui/reveal'
 import { getIncomingSwapRequests, IncomingSwapRequest, respondToSwapRequest } from '../../../lib/swaps'
 
@@ -19,8 +20,12 @@ export default function SwapInboxScreen() {
   const [processingId, setProcessingId] = useState<string | null>(null)
 
   const loadRequests = async () => {
-    const data = await getIncomingSwapRequests()
-    setRequests(data)
+    try {
+      const data = await getIncomingSwapRequests()
+      setRequests(data)
+    } catch (error) {
+      Alert.alert('No se pudieron cargar las solicitudes', error instanceof Error ? error.message : 'Intenta nuevamente.')
+    }
   }
 
   useEffect(() => {
@@ -29,16 +34,21 @@ export default function SwapInboxScreen() {
 
   const handleDecision = async (swapId: string, decision: 'accepted' | 'rejected') => {
     setProcessingId(swapId)
-    await respondToSwapRequest(swapId, decision)
-    setProcessingId(null)
-    await loadRequests()
+    try {
+      await respondToSwapRequest(swapId, decision)
+      await loadRequests()
 
-    Alert.alert(
-      decision === 'accepted' ? 'Intercambio aceptado' : 'Intercambio rechazado',
-      decision === 'accepted'
-        ? 'Las tareas fueron actualizadas para este intercambio.'
-        : 'La solicitud fue rechazada y las tareas se mantienen.'
-    )
+      Alert.alert(
+        decision === 'accepted' ? 'Intercambio aceptado' : 'Intercambio rechazado',
+        decision === 'accepted'
+          ? 'Las tareas fueron actualizadas para este intercambio.'
+          : 'La solicitud fue rechazada y las tareas se mantienen.'
+      )
+    } catch (error) {
+      Alert.alert('No se pudo procesar', error instanceof Error ? error.message : 'Intenta nuevamente.')
+    } finally {
+      setProcessingId(null)
+    }
   }
 
   return (
@@ -52,48 +62,56 @@ export default function SwapInboxScreen() {
         </View>
       </Reveal>
 
-      {requests.length === 0 && (
-        <Reveal delay={90}>
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Sin solicitudes pendientes</Text>
-            <Text style={styles.emptyText}>Cuando otro miembro te pida un intercambio aparecera aqui.</Text>
-          </View>
-        </Reveal>
-      )}
+      <Reveal delay={90}>
+        <View style={styles.emptyCard}>
+          <CollapsibleCard
+            title={requests.length === 0 ? 'Solicitudes pendientes' : `Solicitudes pendientes (${requests.length})`}
+            subtitle="Revisa, acepta o rechaza intercambios del hogar."
+            defaultExpanded={requests.length > 0}
+          >
+            {requests.length === 0 ? (
+              <>
+                <Text style={styles.emptyTitle}>Sin solicitudes pendientes</Text>
+                <Text style={styles.emptyText}>Cuando otro miembro te pida un intercambio aparecera aqui.</Text>
+              </>
+            ) : (
+              requests.map((request, index) => {
+                const processing = processingId === request.id
 
-      {requests.map((request, index) => {
-        const processing = processingId === request.id
+                return (
+                  <Reveal key={request.id} delay={90 + index * 10}>
+                    <View style={styles.requestCard}>
+                      <Text style={styles.requestTitle}>{request.requesterName} quiere intercambiar</Text>
+                      <Text style={styles.requestText}>Tu tarea: {request.targetTaskName}</Text>
+                      <Text style={styles.requestText}>Por su tarea: {request.requesterTaskName}</Text>
+                      <Text style={styles.metaText}>Alcance: {request.scope}</Text>
+                      <Text style={styles.metaText}>Solicitado: {formatTimestamp(request.requestedAt)}</Text>
 
-        return (
-          <Reveal key={request.id} delay={90 + index * 10}>
-            <View style={styles.requestCard}>
-              <Text style={styles.requestTitle}>{request.requesterName} quiere intercambiar</Text>
-              <Text style={styles.requestText}>Tu tarea: {request.targetTaskName}</Text>
-              <Text style={styles.requestText}>Por su tarea: {request.requesterTaskName}</Text>
-              <Text style={styles.metaText}>Alcance: {request.scope}</Text>
-              <Text style={styles.metaText}>Solicitado: {formatTimestamp(request.requestedAt)}</Text>
+                      <View style={styles.actionsRow}>
+                        <TouchableOpacity
+                          style={[styles.rejectButton, processing && styles.disabledButton]}
+                          disabled={processing}
+                          onPress={() => handleDecision(request.id, 'rejected')}
+                        >
+                          <Text style={styles.rejectText}>Rechazar</Text>
+                        </TouchableOpacity>
 
-              <View style={styles.actionsRow}>
-                <TouchableOpacity
-                  style={[styles.rejectButton, processing && styles.disabledButton]}
-                  disabled={processing}
-                  onPress={() => handleDecision(request.id, 'rejected')}
-                >
-                  <Text style={styles.rejectText}>Rechazar</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.acceptButton, processing && styles.disabledButton]}
-                  disabled={processing}
-                  onPress={() => handleDecision(request.id, 'accepted')}
-                >
-                  <Text style={styles.acceptText}>{processing ? 'Procesando...' : 'Aceptar'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Reveal>
-        )
-      })}
+                        <TouchableOpacity
+                          style={[styles.acceptButton, processing && styles.disabledButton]}
+                          disabled={processing}
+                          onPress={() => handleDecision(request.id, 'accepted')}
+                        >
+                          <Text style={styles.acceptText}>{processing ? 'Procesando...' : 'Aceptar'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Reveal>
+                )
+              })
+            )}
+          </CollapsibleCard>
+        </View>
+      </Reveal>
     </ScrollView>
   )
 }

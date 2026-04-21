@@ -1,10 +1,21 @@
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 import { supabase } from '../supabase'
 
 type NotificationsModule = typeof import('expo-notifications')
 
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null
 let notificationHandlerConfigured = false
+
+function resolveExpoProjectId(): string | undefined {
+  const easProjectId = Constants.easConfig?.projectId
+  if (easProjectId) return easProjectId
+
+  const extraProjectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
+  if (extraProjectId) return extraProjectId
+
+  return process.env.EXPO_PUBLIC_EAS_PROJECT_ID
+}
 
 async function getNotificationsModule(): Promise<NotificationsModule | null> {
   if (Platform.OS === 'web') {
@@ -66,7 +77,12 @@ export async function registerPushToken(userId: string): Promise<void> {
   const permission = await requestPushPermission()
   if (!permission) return
 
-  const tokenData = await Notifications.getExpoPushTokenAsync()
+  const projectId = resolveExpoProjectId()
+  if (!projectId) {
+    throw new Error('Falta EXPO_PUBLIC_EAS_PROJECT_ID para registrar notificaciones push reales.')
+  }
+
+  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId })
   const token = tokenData.data
 
   const platform = Platform.OS === 'ios' ? 'ios' : 'android'

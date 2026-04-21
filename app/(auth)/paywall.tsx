@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar'
 import { BorderRadius, Spacing } from '../../constants/theme'
 import { supabase } from '../../lib/supabase'
 import { getCurrentOwnedPlanAsync } from '../../lib/dashboard'
+import { purchasePlan, restorePurchasesAndSync } from '../../lib/purchases'
 import { SubscriptionPlan } from '../../types'
 
 const PLANS = [
@@ -56,6 +57,7 @@ export default function PaywallScreen() {
   const [refreshingVerification, setRefreshingVerification] = useState(false)
   const [ownedPlan, setOwnedPlan] = useState<SubscriptionPlan>('free')
   const [checkingPlan, setCheckingPlan] = useState(true)
+  const [restoring, setRestoring] = useState(false)
 
   const reveal   = useRef(new Animated.Value(0)).current
 
@@ -90,12 +92,12 @@ export default function PaywallScreen() {
     return 'la app'
   }, [source])
 
-  useEffect(() => {
+  const startReveal = () => {
     Animated.timing(reveal, {
       toValue: 1, duration: 560, delay: 60,
       easing: Easing.out(Easing.cubic), useNativeDriver: true,
     }).start()
-  }, [])
+  }
 
   const readVerificationState = async (options?: { forceRefresh?: boolean }) => {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -273,11 +275,45 @@ export default function PaywallScreen() {
       router.replace('/(app)/(tabs)/today')
       return
     }
-    Alert.alert(
-      'Próximamente',
-      'La suscripción estará disponible muy pronto. Por ahora puedes usar el plan gratis.',
-      [{ text: 'Continuar gratis', onPress: () => router.replace('/(app)/(tabs)/today') }]
-    )
+
+    try {
+      setLoading(true)
+      const nextOwnedPlan = await purchasePlan(plan.id as SubscriptionPlan)
+      setOwnedPlan(nextOwnedPlan)
+      router.replace('/(app)/(tabs)/today')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo completar la compra.'
+      if (message !== 'Compra cancelada.') {
+        Alert.alert('No se pudo activar el plan', message)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRestorePurchases = async () => {
+    if (restoring) return
+
+    try {
+      setRestoring(true)
+      const nextOwnedPlan = await restorePurchasesAndSync()
+      setOwnedPlan(nextOwnedPlan)
+
+      if (nextOwnedPlan === 'free') {
+        Alert.alert('Sin compras para restaurar', 'No encontramos una suscripción activa asociada a esta cuenta.')
+        return
+      }
+
+      Alert.alert(
+        'Compra restaurada',
+        `Tu cuenta recuperó el plan ${nextOwnedPlan === 'familia' ? 'Familia' : 'Hogar'}.`,
+        [{ text: 'Continuar', onPress: () => router.replace('/(app)/(tabs)/today') }]
+      )
+    } catch (error) {
+      Alert.alert('No se pudo restaurar', error instanceof Error ? error.message : 'No pudimos restaurar tus compras.')
+    } finally {
+      setRestoring(false)
+    }
   }
 
   const hogarPlan = PLANS[1]
@@ -300,6 +336,7 @@ export default function PaywallScreen() {
         source={require('../../assets/images/onboarding/paywall.png.png')}
         style={styles.photoBg}
         resizeMode="cover"
+        onLoad={startReveal}
       />
       <View style={styles.photoVeil} />
 
@@ -358,6 +395,13 @@ export default function PaywallScreen() {
 
           {/* Plan section */}
           <Text style={styles.sectionLabel}>Elige tu plan</Text>
+          <Pressable
+            style={({ pressed }) => [styles.restoreLink, pressed && { opacity: 0.78 }]}
+            onPress={handleRestorePurchases}
+            disabled={restoring}
+          >
+            <Text style={styles.restoreLinkText}>{restoring ? 'Restaurando compras...' : 'Restaurar compras'}</Text>
+          </Pressable>
 
           {/* — Hero card: Hogar — */}
           <Pressable
@@ -403,7 +447,7 @@ export default function PaywallScreen() {
                   selectedPlan === plan.id && styles.altCardSelected,
                   emailVerified === false && plan.id !== 'free' && styles.planLocked,
                 ]}
-                onPress={() => setSelectedPlan(plan.id)}
+                onPress={() => setSelectedPlan(plan.id as SubscriptionPlan)}
                 disabled={emailVerified === false && plan.id !== 'free'}
               >
                 <Text style={[styles.altName, selectedPlan === plan.id && styles.altNameSel]}>
@@ -603,6 +647,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
     color: '#A8A29E',
+  },
+  restoreLink: {
+    alignSelf: 'flex-start',
+    marginTop: -4,
+  },
+  restoreLinkText: {
+    color: '#744C2B',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // ── Hero card (Hogar) ────────────────────────────────────────

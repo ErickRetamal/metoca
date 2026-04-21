@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Skeleton } from '../../../components/ui/skeleton'
 import { getMonthKey, getMonthTasksAsync } from '../../../lib/dashboard'
 import { firstNameOnly } from '../../../lib/user-name'
@@ -150,19 +151,23 @@ export default function TaskMonthDetailScreen() {
         </View>
 
         <View style={styles.listCard}>
-          <Text style={styles.sectionTitle}>Ejecuciones del mes</Text>
-          {executions.length === 0 ? (
-            <Text style={styles.emptyText}>No hay ejecuciones para esta tarea en este mes.</Text>
-          ) : (
-            executions.map(execution => (
-              <View key={execution.id} style={styles.row}>
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(execution.status) }]} />
-                <Text style={styles.status}>{getStatusSymbol(execution.status)}</Text>
-                <Text style={styles.day}>{formatDayLabel(execution.scheduledDate)}</Text>
-                <Text style={styles.time}>{execution.scheduledTime.slice(0, 5)}</Text>
-              </View>
-            ))
-          )}
+          <CollapsibleCard
+            title="Ejecuciones del mes"
+            subtitle="Historial de la tarea para el mes seleccionado."
+          >
+            {executions.length === 0 ? (
+              <Text style={styles.emptyText}>No hay ejecuciones para esta tarea en este mes.</Text>
+            ) : (
+              executions.map(execution => (
+                <View key={execution.id} style={styles.row}>
+                  <View style={[styles.statusDot, { backgroundColor: getStatusColor(execution.status) }]} />
+                  <Text style={styles.status}>{getStatusSymbol(execution.status)}</Text>
+                  <Text style={styles.day}>{formatDayLabel(execution.scheduledDate)}</Text>
+                  <Text style={styles.time}>{execution.scheduledTime.slice(0, 5)}</Text>
+                </View>
+              ))
+            )}
+          </CollapsibleCard>
         </View>
 
         <Pressable style={styles.backButton} onPress={() => router.back()}>

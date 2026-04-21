@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -33,7 +33,7 @@ export default function ValuePropScreen() {
   const flashOpacity = useRef(new Animated.Value(0)).current
   const navigatingRef = useRef(false)
 
-  useEffect(() => {
+  const startReveal = () => {
     Animated.timing(reveal, {
       toValue: 1,
       duration: 540,
@@ -41,7 +41,7 @@ export default function ValuePropScreen() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start()
-  }, [])
+  }
 
   const handleContinue = () => {
     if (navigatingRef.current) return
@@ -102,6 +102,7 @@ export default function ValuePropScreen() {
           { transform: [{ scale: sceneScale }, { translateY: sceneTranslateY }] },
         ]}
         resizeMode="cover"
+        onLoad={startReveal}
       />
       <View style={styles.photoVeil} />
       <Animated.View pointerEvents="none" style={[styles.flash, { opacity: flashOpacity }]} />

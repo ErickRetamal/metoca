@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
 import { goToPaywall } from '../../../lib/navigation'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Reveal } from '../../../components/ui/reveal'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
@@ -33,21 +34,26 @@ export default function SettingsScreen() {
 
         <Reveal delay={90}>
         <View style={styles.listCard}>
-          {SETTINGS_ITEMS.map(item => (
-            <Pressable
-              key={item.title}
-              style={styles.itemRow}
-              onPress={() => {
-                if (item.title === 'Suscripcion') {
-                  goToPaywall('settings-subscription-item')
-                }
-              }}
-            >
-              <Text style={styles.itemEyebrow}>{item.title === 'Suscripcion' ? 'Plan' : 'Preferencia'}</Text>
-              <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
-            </Pressable>
-          ))}
+          <CollapsibleCard
+            title="Preferencias"
+            subtitle="Notificaciones, privacidad, suscripción y ayuda."
+          >
+            {SETTINGS_ITEMS.map(item => (
+              <Pressable
+                key={item.title}
+                style={styles.itemRow}
+                onPress={() => {
+                  if (item.title === 'Suscripcion') {
+                    goToPaywall('settings-subscription-item')
+                  }
+                }}
+              >
+                <Text style={styles.itemEyebrow}>{item.title === 'Suscripcion' ? 'Plan' : 'Preferencia'}</Text>
+                <Text style={styles.itemTitle}>{item.title}</Text>
+                <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
+              </Pressable>
+            ))}
+          </CollapsibleCard>
         </View>
         </Reveal>
       </ScrollView>

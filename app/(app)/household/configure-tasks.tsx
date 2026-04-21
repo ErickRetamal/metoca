@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { router } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Reveal } from '../../../components/ui/reveal'
 import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
@@ -701,99 +702,113 @@ export default function ConfigureHouseholdTasksScreen() {
           <>
             <Reveal delay={70}>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Distribución de tareas</Text>
-                <Text style={styles.cardSubtitle}>
-                  Úsalo cuando entre un miembro nuevo o cuando quieras redistribuir antes del automático del día 15.
-                </Text>
-                <Pressable
-                  style={[styles.primaryButton, redistributing && styles.buttonDisabled]}
-                  onPress={handleRedistributeTasksNow}
-                  disabled={redistributing}
+                <CollapsibleCard
+                  title="Distribución de tareas"
+                  subtitle="Reasigna al entrar un miembro nuevo o antes del automático del día 15."
                 >
-                  <View style={styles.redistributeButtonContent}>
-                    {redistributing && <ActivityIndicator size="small" color={Colors.surface} />}
-                    <Text style={styles.primaryButtonText}>
-                      {redistributing ? 'Redistribuyendo...' : 'Redistribuir tareas ahora'}
-                    </Text>
-                  </View>
-                </Pressable>
+                  <Pressable
+                    style={[styles.primaryButton, redistributing && styles.buttonDisabled]}
+                    onPress={handleRedistributeTasksNow}
+                    disabled={redistributing}
+                  >
+                    <View style={styles.redistributeButtonContent}>
+                      {redistributing && <ActivityIndicator size="small" color={Colors.surface} />}
+                      <Text style={styles.primaryButtonText}>
+                        {redistributing ? 'Redistribuyendo...' : 'Redistribuir tareas ahora'}
+                      </Text>
+                    </View>
+                  </Pressable>
 
-                {redistributionStatus && (
-                  <Text style={styles.redistributionStatusText}>{redistributionStatus}</Text>
-                )}
+                  {redistributionStatus && (
+                    <Text style={styles.redistributionStatusText}>{redistributionStatus}</Text>
+                  )}
+                </CollapsibleCard>
               </View>
             </Reveal>
 
             <Reveal delay={80}>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Tareas activas ({activeTasks.length})</Text>
-                {activeTasks.length === 0 ? (
-                  <Text style={styles.cardSubtitle}>No hay tareas activas aún.</Text>
-                ) : (
-                  <View style={styles.activeTaskList}>
-                    {activeTasks.map(task => (
-                      <View key={task.id} style={styles.activeTaskRow}>
-                        <View style={styles.activeTaskInfo}>
-                          <Text style={styles.activeTaskName}>{task.name}</Text>
-                          <Text style={styles.activeTaskMeta}>
-                            {task.frequency === 'daily' ? 'Diaria' : task.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
-                            {task.isCustom ? ' · Personalizada' : ''}
-                          </Text>
+                <CollapsibleCard
+                  title={`Tareas activas (${activeTasks.length})`}
+                  subtitle="Revisa y elimina tareas que ya no deberían seguir activas."
+                >
+                  {activeTasks.length === 0 ? (
+                    <Text style={styles.cardSubtitle}>No hay tareas activas aún.</Text>
+                  ) : (
+                    <View style={styles.activeTaskList}>
+                      {activeTasks.map(task => (
+                        <View key={task.id} style={styles.activeTaskRow}>
+                          <View style={styles.activeTaskInfo}>
+                            <Text style={styles.activeTaskName}>{task.name}</Text>
+                            <Text style={styles.activeTaskMeta}>
+                              {task.frequency === 'daily' ? 'Diaria' : task.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
+                              {task.isCustom ? ' · Personalizada' : ''}
+                            </Text>
+                          </View>
+                          <Pressable
+                            style={[styles.deactivateButton, saving && styles.buttonDisabled]}
+                            onPress={() => handleDeactivateTask(task.id, task.name)}
+                            disabled={saving}
+                          >
+                            <Text style={styles.deactivateButtonText}>Eliminar</Text>
+                          </Pressable>
                         </View>
-                        <Pressable
-                          style={[styles.deactivateButton, saving && styles.buttonDisabled]}
-                          onPress={() => handleDeactivateTask(task.id, task.name)}
-                          disabled={saving}
-                        >
-                          <Text style={styles.deactivateButtonText}>Eliminar</Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                      ))}
+                    </View>
+                  )}
+                </CollapsibleCard>
               </View>
             </Reveal>
 
             <Reveal delay={90}>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Tareas fijas disponibles</Text>
-                {availableTemplates.length === 0 ? (
-                  <Text style={styles.cardSubtitle}>Todas las tareas fijas ya están activas.</Text>
-                ) : (
-                  <View style={styles.templateGrid}>
-                    {availableTemplates.map(template => (
-                      <Pressable
-                        key={template.key}
-                        style={[styles.templateCard, saving && styles.templateCardDisabled]}
-                        onPress={() => {
-                          setTemplateToActivate(template)
-                          setTemplateFrequency(template.frequency)
-                          setTemplateAudience('todos')
-                          setTemplateTimeDraft(template.notificationTime.slice(0, 5))
-                          setTemplateDaysOfWeek(template.dayOfWeek != null ? [template.dayOfWeek] : [1])
-                          setTemplateDayOfMonth(template.dayOfMonth ?? 1)
-                          setTemplateExtraWeeklySlots([])
-                        }}
-                        disabled={saving}
-                      >
-                        <View style={[styles.templateThumb, { backgroundColor: template.color }]}> 
-                          <Text style={styles.templateThumbText}>{template.code}</Text>
-                        </View>
-                        <Text style={styles.templateName} numberOfLines={2}>{template.name}</Text>
-                        <Text style={styles.templateMeta}>Agregar</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
+                <CollapsibleCard
+                  title="Tareas fijas disponibles"
+                  subtitle="Activa plantillas predefinidas sin recorrer toda la pantalla."
+                  defaultExpanded={true}
+                >
+                  {availableTemplates.length === 0 ? (
+                    <Text style={styles.cardSubtitle}>Todas las tareas fijas ya están activas.</Text>
+                  ) : (
+                    <View style={styles.templateGrid}>
+                      {availableTemplates.map(template => (
+                        <Pressable
+                          key={template.key}
+                          style={[styles.templateCard, saving && styles.templateCardDisabled]}
+                          onPress={() => {
+                            setTemplateToActivate(template)
+                            setTemplateFrequency(template.frequency)
+                            setTemplateAudience('todos')
+                            setTemplateTimeDraft(template.notificationTime.slice(0, 5))
+                            setTemplateDaysOfWeek(template.dayOfWeek != null ? [template.dayOfWeek] : [1])
+                            setTemplateDayOfMonth(template.dayOfMonth ?? 1)
+                            setTemplateExtraWeeklySlots([])
+                          }}
+                          disabled={saving}
+                        >
+                          <View style={[styles.templateThumb, { backgroundColor: template.color }]}> 
+                            <Text style={styles.templateThumbText}>{template.code}</Text>
+                          </View>
+                          <Text style={styles.templateName} numberOfLines={2}>{template.name}</Text>
+                          <Text style={styles.templateMeta}>Agregar</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </CollapsibleCard>
               </View>
             </Reveal>
 
             {templateToActivate && (
               <Reveal delay={110}>
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Configurar "{templateToActivate.name}"</Text>
-
-                  <View style={styles.frequencyRow}>
+                  <CollapsibleCard
+                    title={`Configurar "${templateToActivate.name}"`}
+                    subtitle="Ajusta frecuencia, audiencia y horarios antes de activarla."
+                    defaultExpanded={true}
+                    forceExpanded={true}
+                  >
+                    <View style={styles.frequencyRow}>
                     <Pressable style={[styles.frequencyChip, templateFrequency === 'daily' && styles.frequencyChipActive]} onPress={() => setTemplateFrequency('daily')}>
                       <Text style={[styles.frequencyChipText, templateFrequency === 'daily' && styles.frequencyChipTextActive]}>Diaria</Text>
                     </Pressable>
@@ -940,6 +955,7 @@ export default function ConfigureHouseholdTasksScreen() {
                       <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Activar tarea'}</Text>
                     </Pressable>
                   </View>
+                  </CollapsibleCard>
                 </View>
               </Reveal>
             )}
@@ -947,7 +963,11 @@ export default function ConfigureHouseholdTasksScreen() {
             {isProPlan ? (
               <Reveal delay={130}>
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>Tarea personalizada</Text>
+                  <CollapsibleCard
+                    title="Tarea personalizada"
+                    subtitle="Crea tareas propias sin dejar visible todo el formulario cuando no lo usas."
+                    forceExpanded={customTaskNameDraft.trim().length > 0}
+                  >
                   <TextInput
                     style={styles.input}
                     value={customTaskNameDraft}
@@ -1099,6 +1119,7 @@ export default function ConfigureHouseholdTasksScreen() {
                   <Pressable style={[styles.primaryButton, saving && styles.buttonDisabled]} onPress={handleAddCustomTask} disabled={saving}>
                     <Text style={styles.primaryButtonText}>{saving ? 'Guardando...' : 'Agregar tarea personalizada'}</Text>
                   </Pressable>
+                  </CollapsibleCard>
                 </View>
               </Reveal>
             ) : (

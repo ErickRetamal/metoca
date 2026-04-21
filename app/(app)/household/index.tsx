@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import { BorderRadius, Colors, Spacing, ShadowPresets } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Reveal } from '../../../components/ui/reveal'
 import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
@@ -880,7 +881,10 @@ export default function HouseholdScreen() {
             {/* Members */}
             <Reveal delay={100}>
               <View style={styles.card}>
-              <Text style={styles.cardTitle}>Miembros ({household.members.length})</Text>
+              <CollapsibleCard
+                title={`Miembros (${household.members.length})`}
+                subtitle="Revisa perfiles y roles del hogar."
+              >
               {household.members.map(m => (
                 <View key={m.id} style={styles.memberRow}>
                   <View style={[styles.memberAvatar, m.id === household.adminUserId && styles.memberAvatarAdmin]}>
@@ -916,17 +920,28 @@ export default function HouseholdScreen() {
                   </View>
                 </View>
               ))}
+              </CollapsibleCard>
             </View>
             </Reveal>
 
             <Reveal delay={110}>
               <View style={styles.card}>
-              <Text style={styles.cardTitle}>Tareas del hogar</Text>
+              <CollapsibleCard
+                title="Tareas del hogar"
+                subtitle={isAdmin ? 'Resumen y accesos de administración.' : 'Acceso rápido a las tareas del hogar de hoy.'}
+              >
               <Text style={styles.cardSubtitle}>
                 {isAdmin
                   ? 'Administra y asigna tareas desde la pantalla de configuración.'
-                  : 'Revisa las tareas del hogar en la pantalla de configuración.'}
+                  : 'Revisa las tareas del hogar desde la vista diaria del hogar.'}
               </Text>
+
+              <Pressable
+                style={isAdmin ? styles.secondaryButton : styles.primaryButton}
+                onPress={() => router.push({ pathname: '/(app)/(tabs)/today', params: { mode: 'household' } })}
+              >
+                <Text style={isAdmin ? styles.secondaryButtonText : styles.primaryButtonText}>Ver tareas de hoy</Text>
+              </Pressable>
 
               {isAdmin && (
                 <Pressable
@@ -936,6 +951,7 @@ export default function HouseholdScreen() {
                   <Text style={styles.primaryButtonText}>Abrir configuración de tareas</Text>
                 </Pressable>
               )}
+              </CollapsibleCard>
             </View>
             </Reveal>
 
@@ -943,7 +959,10 @@ export default function HouseholdScreen() {
             <Reveal delay={130}>
             {isAdmin && !isOnlyMember && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Transferir jefatura</Text>
+                <CollapsibleCard
+                  title="Transferir jefatura"
+                  subtitle="Cambia el jefe de hogar antes de salir."
+                >
                 {transferCandidates.length === 0 ? (
                   <Text style={styles.cardSubtitle}>Necesitas al menos otro miembro activo para transferir el hogar.</Text>
                 ) : (
@@ -965,6 +984,7 @@ export default function HouseholdScreen() {
                     ))}
                   </View>
                 )}
+                </CollapsibleCard>
               </View>
             )}
 
@@ -985,8 +1005,11 @@ export default function HouseholdScreen() {
             {/* Create */}
             <Reveal delay={90}>
               <View style={styles.card}>
-              <Text style={styles.cardTitle}>Crear hogar</Text>
-              <Text style={styles.cardSubtitle}>Elige un nombre y comparte el código con tu familia.</Text>
+              <CollapsibleCard
+                title="Crear hogar"
+                subtitle="Elige un nombre y comparte el código con tu familia."
+                defaultExpanded={true}
+              >
               <TextInput
                 style={styles.input}
                 value={householdNameDraft}
@@ -1003,14 +1026,17 @@ export default function HouseholdScreen() {
               >
                 <Text style={styles.primaryButtonText}>{saving ? 'Creando...' : 'Crear hogar'}</Text>
               </Pressable>
+              </CollapsibleCard>
             </View>
             </Reveal>
 
             {/* Join */}
             <Reveal delay={100}>
               <View style={styles.card}>
-              <Text style={styles.cardTitle}>Unirme con código</Text>
-              <Text style={styles.cardSubtitle}>Pídele a tu jefe de hogar el código de 8 caracteres.</Text>
+              <CollapsibleCard
+                title="Unirme con código"
+                subtitle="Pídele a tu jefe de hogar el código de 8 caracteres."
+              >
               <TextInput
                 style={[styles.input, styles.inputCode]}
                 value={inviteCodeDraft}
@@ -1028,6 +1054,7 @@ export default function HouseholdScreen() {
               >
                 <Text style={styles.primaryButtonText}>{saving ? 'Uniéndome...' : 'Unirme'}</Text>
               </Pressable>
+              </CollapsibleCard>
             </View>
             </Reveal>
           </>
@@ -1482,6 +1509,20 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: Colors.surface,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: '#E6C6A1',
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#FFF1E4',
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  secondaryButtonText: {
+    color: '#8A4C1B',
     fontSize: 15,
     fontWeight: '700',
   },

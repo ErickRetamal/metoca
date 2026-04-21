@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -34,12 +34,12 @@ const STEPS = [
 export default function HowItWorksScreen() {
   const reveal = useRef(new Animated.Value(0)).current
 
-  useEffect(() => {
+  const startReveal = () => {
     Animated.timing(reveal, {
       toValue: 1, duration: 520, delay: 60,
       easing: Easing.out(Easing.cubic), useNativeDriver: true,
     }).start()
-  }, [])
+  }
 
   return (
     <View style={styles.root}>
@@ -49,6 +49,7 @@ export default function HowItWorksScreen() {
         source={require('../../assets/images/onboarding/how-it-works.png.png')}
         style={styles.photoBg}
         resizeMode="cover"
+        onLoad={startReveal}
       />
       <View style={styles.photoVeil} />
 

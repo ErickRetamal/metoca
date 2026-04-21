@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { Colors, Spacing, BorderRadius, ShadowPresets } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Reveal } from '../../../components/ui/reveal'
 import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
@@ -298,108 +299,111 @@ export default function TodayScreen() {
 
         <Reveal delay={90}>
         <View style={styles.listCard}>
-          {viewMode === 'mine' ? (
-            <>
-              <Text style={styles.sectionTitle}>{`${currentUserName.toUpperCase()} - DIA`}</Text>
+          <CollapsibleCard
+            title={viewMode === 'mine' ? `${currentUserName.toUpperCase()} - DIA` : 'HOGAR - DIA'}
+            subtitle={viewMode === 'mine' ? 'Tus tareas activas y su estado de hoy.' : 'Resumen del avance de cada miembro hoy.'}
+            defaultExpanded={true}
+          >
+            {viewMode === 'mine' ? (
+              <>
+                {taskActionFeedback && (
+                  <View style={[
+                    styles.feedbackBox,
+                    taskActionFeedback.type === 'success' ? styles.feedbackSuccessBox : styles.feedbackErrorBox,
+                  ]}>
+                    <Text style={[
+                      styles.feedbackText,
+                      taskActionFeedback.type === 'success' ? styles.feedbackSuccessText : styles.feedbackErrorText,
+                    ]}>{taskActionFeedback.message}</Text>
+                  </View>
+                )}
 
-              {taskActionFeedback && (
-                <View style={[
-                  styles.feedbackBox,
-                  taskActionFeedback.type === 'success' ? styles.feedbackSuccessBox : styles.feedbackErrorBox,
-                ]}>
-                  <Text style={[
-                    styles.feedbackText,
-                    taskActionFeedback.type === 'success' ? styles.feedbackSuccessText : styles.feedbackErrorText,
-                  ]}>{taskActionFeedback.message}</Text>
-                </View>
-              )}
+                {tasks.length === 0 ? (
+                  <View style={styles.emptyStateContainer}>
+                    <Text style={styles.emptyStateIcon}>📭</Text>
+                    <Text style={styles.emptyStateTitle}>Sin tareas hoy</Text>
+                    <Text style={styles.emptyStateText}>¡Impresionante! No tienes tareas asignadas para hoy.</Text>
+                    <Text style={styles.emptyStateSubtext}>Usa "Solicitar intercambio" si necesitas tomar una tarea de otro miembro.</Text>
+                  </View>
+                ) : (
+                  tasks.map(task => (
+                    <View
+                      key={task.id}
+                      style={[styles.taskRow, task.status === 'completed' && styles.taskRowCompleted]}
+                    >
+                      <View style={styles.taskRowContent}>
+                        <View style={[styles.statusDot, { backgroundColor: getStatusColor(task.status) }]} />
+                        <View style={styles.taskNameContainer}>
+                          <Text style={styles.taskName}>{task.taskName}</Text>
+                          <Text style={styles.taskStatusLabel}>{getStatusLabel(task.status)}</Text>
+                        </View>
+                      </View>
 
-              {tasks.length === 0 ? (
-                <View style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyStateIcon}>📭</Text>
-                  <Text style={styles.emptyStateTitle}>Sin tareas hoy</Text>
-                  <Text style={styles.emptyStateText}>¡Impresionante! No tienes tareas asignadas para hoy.</Text>
-                  <Text style={styles.emptyStateSubtext}>Usa "Solicitar intercambio" si necesitas tomar una tarea de otro miembro.</Text>
-                </View>
-              ) : (
-                tasks.map(task => (
-                  <View
-                    key={task.id}
-                    style={[styles.taskRow, task.status === 'completed' && styles.taskRowCompleted]}
-                  >
-                    <View style={styles.taskRowContent}>
-                      <View style={[styles.statusDot, { backgroundColor: getStatusColor(task.status) }]} />
-                      <View style={styles.taskNameContainer}>
-                        <Text style={styles.taskName}>{task.taskName}</Text>
-                        <Text style={styles.taskStatusLabel}>{getStatusLabel(task.status)}</Text>
+                      <View style={styles.taskRowActions}>
+                        <Text style={styles.taskTime}>{task.scheduledTime}</Text>
+
+                        {task.status === 'pending' ? (
+                          <Pressable
+                            style={[styles.completeButton, completingTaskId === task.id && styles.completeButtonDisabled]}
+                            onPress={() => handleTaskPress(task.id, task.status, task.taskName)}
+                            disabled={completingTaskId === task.id}
+                          >
+                            <Text style={styles.completeButtonText}>{completingTaskId === task.id ? 'Guardando...' : 'Realizada'}</Text>
+                          </Pressable>
+                        ) : (
+                          <Text style={[styles.status, { color: getStatusColor(task.status) }]}>{getStatusSymbol(task.status)}</Text>
+                        )}
                       </View>
                     </View>
+                  ))
+                )}
+              </>
+            ) : (
+              <>
+                {householdRows.length === 0 ? (
+                  <Text style={styles.emptyText}>No hay tareas asignadas para tu hogar hoy.</Text>
+                ) : (
+                  householdRows.map(row => {
+                    const rowProgress = row.assigned === 0 ? 0 : Math.round((row.completed / row.assigned) * 100)
+                    const isExpanded = expandedHouseholdMemberId === row.member.id
+                    const alert = shouldShowAlert(row.completed, row.assigned)
 
-                    <View style={styles.taskRowActions}>
-                      <Text style={styles.taskTime}>{task.scheduledTime}</Text>
-
-                      {task.status === 'pending' ? (
+                    return (
+                      <View key={row.member.id} style={styles.memberBlock}>
                         <Pressable
-                          style={[styles.completeButton, completingTaskId === task.id && styles.completeButtonDisabled]}
-                          onPress={() => handleTaskPress(task.id, task.status, task.taskName)}
-                          disabled={completingTaskId === task.id}
+                          style={[styles.memberHeader, isExpanded && styles.memberHeaderExpanded]}
+                          onPress={() => setExpandedHouseholdMemberId(prev => (prev === row.member.id ? null : row.member.id))}
                         >
-                          <Text style={styles.completeButtonText}>{completingTaskId === task.id ? 'Guardando...' : 'Realizada'}</Text>
-                        </Pressable>
-                      ) : (
-                        <Text style={[styles.status, { color: getStatusColor(task.status) }]}>{getStatusSymbol(task.status)}</Text>
-                      )}
-                    </View>
-                  </View>
-                ))
-              )}
-            </>
-          ) : (
-            <>
-              <Text style={styles.sectionTitle}>HOGAR - DIA</Text>
-              {householdRows.length === 0 ? (
-                <Text style={styles.emptyText}>No hay tareas asignadas para tu hogar hoy.</Text>
-              ) : (
-                householdRows.map(row => {
-                  const rowProgress = row.assigned === 0 ? 0 : Math.round((row.completed / row.assigned) * 100)
-                  const isExpanded = expandedHouseholdMemberId === row.member.id
-                  const alert = shouldShowAlert(row.completed, row.assigned)
-
-                  return (
-                    <View key={row.member.id} style={styles.memberBlock}>
-                      <Pressable
-                        style={[styles.memberHeader, isExpanded && styles.memberHeaderExpanded]}
-                        onPress={() => setExpandedHouseholdMemberId(prev => (prev === row.member.id ? null : row.member.id))}
-                      >
-                        <View style={styles.memberIdentity}>
-                          <View style={styles.memberAvatar}><Text style={styles.memberAvatarText}>{row.member.name.charAt(0).toUpperCase()}</Text></View>
-                          <View style={styles.memberMeta}>
-                            <Text style={styles.memberName}>{row.member.name}</Text>
-                            <Text style={styles.memberRatio}>{row.completed}/{row.assigned} completadas</Text>
-                          </View>
-                        </View>
-                        <View style={styles.memberBarTrack}>
-                          <View style={[styles.memberBarFill, { width: `${rowProgress}%` }]} />
-                        </View>
-                        {alert && <Text style={styles.memberAlert}>⚠</Text>}
-                      </Pressable>
-
-                      {isExpanded && (
-                        <View style={styles.memberTasks}>
-                          {row.tasks.map(task => (
-                            <View key={task.id} style={styles.memberTaskRow}>
-                              <Text style={styles.memberTaskName}>{task.taskName}</Text>
-                              <Text style={styles.memberTaskStatus}>{getStatusLabel(task.status)}</Text>
+                          <View style={styles.memberIdentity}>
+                            <View style={styles.memberAvatar}><Text style={styles.memberAvatarText}>{row.member.name.charAt(0).toUpperCase()}</Text></View>
+                            <View style={styles.memberMeta}>
+                              <Text style={styles.memberName}>{row.member.name}</Text>
+                              <Text style={styles.memberRatio}>{row.completed}/{row.assigned} completadas</Text>
                             </View>
-                          ))}
-                        </View>
-                      )}
-                    </View>
-                  )
-                })
-              )}
-            </>
-          )}
+                          </View>
+                          <View style={styles.memberBarTrack}>
+                            <View style={[styles.memberBarFill, { width: `${rowProgress}%` }]} />
+                          </View>
+                          {alert && <Text style={styles.memberAlert}>⚠</Text>}
+                        </Pressable>
+
+                        {isExpanded && (
+                          <View style={styles.memberTasks}>
+                            {row.tasks.map(task => (
+                              <View key={task.id} style={styles.memberTaskRow}>
+                                <Text style={styles.memberTaskName}>{task.taskName}</Text>
+                                <Text style={styles.memberTaskStatus}>{getStatusLabel(task.status)}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    )
+                  })
+                )}
+              </>
+            )}
+          </CollapsibleCard>
         </View>
         </Reveal>
 
@@ -423,20 +427,24 @@ export default function TodayScreen() {
         {viewMode === 'household' && (
           <Reveal delay={200}>
             <View style={styles.tomorrowCard}>
-              <Text style={styles.tomorrowTitle}>HOGAR - MAÑANA</Text>
-              {householdTomorrowWithTasks.length === 0 ? (
-                <Text style={styles.emptyText}>No hay tareas del hogar para mañana.</Text>
-              ) : (
-                householdTomorrowWithTasks.map(row => (
-                  <View key={row.member.id} style={styles.tomorrowRow}>
-                    <View style={styles.tomorrowDot} />
-                    <View style={styles.tomorrowTaskInfo}>
-                      <Text style={styles.tomorrowTaskName}>{row.member.name}</Text>
-                      <Text style={styles.tomorrowTaskMeta}>{row.assigned} tarea{row.assigned === 1 ? '' : 's'}</Text>
+              <CollapsibleCard
+                title="HOGAR - MAÑANA"
+                subtitle="Plan general del hogar para el siguiente día."
+              >
+                {householdTomorrowWithTasks.length === 0 ? (
+                  <Text style={styles.emptyText}>No hay tareas del hogar para mañana.</Text>
+                ) : (
+                  householdTomorrowWithTasks.map(row => (
+                    <View key={row.member.id} style={styles.tomorrowRow}>
+                      <View style={styles.tomorrowDot} />
+                      <View style={styles.tomorrowTaskInfo}>
+                        <Text style={styles.tomorrowTaskName}>{row.member.name}</Text>
+                        <Text style={styles.tomorrowTaskMeta}>{row.assigned} tarea{row.assigned === 1 ? '' : 's'}</Text>
+                      </View>
                     </View>
-                  </View>
-                ))
-              )}
+                  ))
+                )}
+              </CollapsibleCard>
             </View>
           </Reveal>
         )}

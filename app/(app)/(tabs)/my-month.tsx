@@ -3,6 +3,7 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { BorderRadius, Colors, ShadowPresets, Spacing } from '../../../constants/theme'
+import { CollapsibleCard } from '../../../components/ui/collapsible-card'
 import { Skeleton } from '../../../components/ui/skeleton'
 import { HamburgerButton } from '../../../components/dashboard/side-menu'
 import { useMenuContext } from '../../../lib/menu-context'
@@ -515,201 +516,206 @@ export default function MyMonthScreen() {
 
         {viewMode === 'mine' ? (
           <View style={styles.fitnessCard}>
-            <View style={styles.fitnessHeaderRow}>
-              <Text style={styles.fitnessTitle}>Indicadores del mes</Text>
-              <Text style={styles.fitnessSubtitle}>{monthLabel}</Text>
-            </View>
-
-            <View style={styles.ringsRow}>
-              <View style={styles.ringItem}>
-                <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
-                  <View style={styles.ringInner}>
-                    <Text style={styles.ringValue}>{progress}%</Text>
-                  </View>
-                </View>
-                <Text style={styles.ringLabel}>Cumplidas</Text>
-              </View>
-
-              <View style={styles.ringItem}>
-                <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
-                  <View style={styles.ringInner}>
-                    <Text style={styles.ringValue}>{consistency}%</Text>
-                  </View>
-                </View>
-                <Text style={styles.ringLabel}>Consistencia</Text>
-              </View>
-
-              <View style={styles.ringItem}>
-                <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
-                  <View style={styles.ringInner}>
-                    <Text style={styles.ringValue}>{missedRate}%</Text>
-                  </View>
-                </View>
-                <Text style={styles.ringLabel}>Vencidas</Text>
-              </View>
-            </View>
-
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <Text style={styles.kpiLabel}>Racha actual</Text>
-                <Text style={styles.kpiValue}>{streak} dias</Text>
-              </View>
-              <View style={styles.kpiItem}>
-                <Text style={styles.kpiLabel}>Pendientes</Text>
-                <Text style={styles.kpiValue}>{pendingRate}%</Text>
-              </View>
-              <View style={styles.kpiItem}>
-                <Text style={styles.kpiLabel}>Vs mes anterior</Text>
-                <Text style={[styles.kpiValue, completionDelta >= 0 ? styles.kpiPositive : styles.kpiNegative]}>
-                  {completionDelta >= 0 ? '+' : ''}{completionDelta}%
-                </Text>
-              </View>
-            </View>
-
-            {canNavigateHistory ? (
-              <View style={styles.historyList}>
-                <Text style={styles.historyTitle}>Meses anteriores</Text>
-                {historyStats.map(item => (
-                  <View key={item.offset} style={styles.historyRow}>
-                    <View style={styles.historyRowHeader}>
-                      <Text style={styles.historyMonth}>{item.label}</Text>
-                      <Text style={styles.historyPct}>{item.completion}%</Text>
+            <CollapsibleCard
+              title="Indicadores del mes"
+              subtitle={monthLabel}
+              defaultExpanded={true}
+            >
+              <View style={styles.ringsRow}>
+                <View style={styles.ringItem}>
+                  <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
+                    <View style={styles.ringInner}>
+                      <Text style={styles.ringValue}>{progress}%</Text>
                     </View>
-                    <View style={styles.historyBarTrack}>
-                      <View style={[styles.historyBarFill, { width: `${item.completion}%` }]} />
-                    </View>
-                    <Text style={styles.historyMeta}>{item.total} tareas en total</Text>
                   </View>
-                ))}
+                  <Text style={styles.ringLabel}>Cumplidas</Text>
+                </View>
+
+                <View style={styles.ringItem}>
+                  <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
+                    <View style={styles.ringInner}>
+                      <Text style={styles.ringValue}>{consistency}%</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.ringLabel}>Consistencia</Text>
+                </View>
+
+                <View style={styles.ringItem}>
+                  <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
+                    <View style={styles.ringInner}>
+                      <Text style={styles.ringValue}>{missedRate}%</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.ringLabel}>Vencidas</Text>
+                </View>
               </View>
-            ) : (
-              <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-locked-card')}>
-                <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
-                <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
-              </Pressable>
-            )}
+
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiItem}>
+                  <Text style={styles.kpiLabel}>Racha actual</Text>
+                  <Text style={styles.kpiValue}>{streak} dias</Text>
+                </View>
+                <View style={styles.kpiItem}>
+                  <Text style={styles.kpiLabel}>Pendientes</Text>
+                  <Text style={styles.kpiValue}>{pendingRate}%</Text>
+                </View>
+                <View style={styles.kpiItem}>
+                  <Text style={styles.kpiLabel}>Vs mes anterior</Text>
+                  <Text style={[styles.kpiValue, completionDelta >= 0 ? styles.kpiPositive : styles.kpiNegative]}>
+                    {completionDelta >= 0 ? '+' : ''}{completionDelta}%
+                  </Text>
+                </View>
+              </View>
+
+              {canNavigateHistory ? (
+                <View style={styles.historyList}>
+                  <Text style={styles.historyTitle}>Meses anteriores</Text>
+                  {historyStats.map(item => (
+                    <View key={item.offset} style={styles.historyRow}>
+                      <View style={styles.historyRowHeader}>
+                        <Text style={styles.historyMonth}>{item.label}</Text>
+                        <Text style={styles.historyPct}>{item.completion}%</Text>
+                      </View>
+                      <View style={styles.historyBarTrack}>
+                        <View style={[styles.historyBarFill, { width: `${item.completion}%` }]} />
+                      </View>
+                      <Text style={styles.historyMeta}>{item.total} tareas en total</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-locked-card')}>
+                  <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
+                  <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
+                </Pressable>
+              )}
+            </CollapsibleCard>
           </View>
         ) : (
           <View style={styles.fitnessCard}>
-            <View style={styles.fitnessHeaderRow}>
-              <Text style={styles.fitnessTitle}>Indicadores del hogar</Text>
-              <Text style={styles.fitnessSubtitle}>{monthLabel}</Text>
-            </View>
-
-            <View style={styles.ringsRow}>
-              <View style={styles.ringItem}>
-                <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
-                  <View style={styles.ringInner}>
-                    <Text style={styles.ringValue}>{householdProgress}%</Text>
+            <CollapsibleCard
+              title="Indicadores del hogar"
+              subtitle={monthLabel}
+              defaultExpanded={true}
+            >
+              <View style={styles.ringsRow}>
+                <View style={styles.ringItem}>
+                  <View style={[styles.ringOuter, { borderColor: '#1D4ED8' }]}>
+                    <View style={styles.ringInner}>
+                      <Text style={styles.ringValue}>{householdProgress}%</Text>
+                    </View>
                   </View>
+                  <Text style={styles.ringLabel}>Cumplidas</Text>
                 </View>
-                <Text style={styles.ringLabel}>Cumplidas</Text>
-              </View>
 
-              <View style={styles.ringItem}>
-                <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
-                  <View style={styles.ringInner}>
-                    <Text style={styles.ringValue}>{householdConsistency}%</Text>
+                <View style={styles.ringItem}>
+                  <View style={[styles.ringOuter, { borderColor: '#16A34A' }]}>
+                    <View style={styles.ringInner}>
+                      <Text style={styles.ringValue}>{householdConsistency}%</Text>
+                    </View>
                   </View>
+                  <Text style={styles.ringLabel}>Consistencia</Text>
                 </View>
-                <Text style={styles.ringLabel}>Consistencia</Text>
-              </View>
 
-              <View style={styles.ringItem}>
-                <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
-                  <View style={styles.ringInner}>
-                    <Text style={styles.ringValue}>{householdMissedRate}%</Text>
+                <View style={styles.ringItem}>
+                  <View style={[styles.ringOuter, { borderColor: '#DC2626' }]}>
+                    <View style={styles.ringInner}>
+                      <Text style={styles.ringValue}>{householdMissedRate}%</Text>
+                    </View>
                   </View>
+                  <Text style={styles.ringLabel}>Vencidas</Text>
                 </View>
-                <Text style={styles.ringLabel}>Vencidas</Text>
               </View>
-            </View>
 
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <Text style={styles.kpiLabel}>Racha hogar</Text>
-                <Text style={styles.kpiValue}>{householdStreak} dias</Text>
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiItem}>
+                  <Text style={styles.kpiLabel}>Racha hogar</Text>
+                  <Text style={styles.kpiValue}>{householdStreak} dias</Text>
+                </View>
+                <View style={styles.kpiItem}>
+                  <Text style={styles.kpiLabel}>Pendientes</Text>
+                  <Text style={styles.kpiValue}>{householdPendingRate}%</Text>
+                </View>
+                <View style={styles.kpiItem}>
+                  <Text style={styles.kpiLabel}>Miembros en riesgo</Text>
+                  <Text style={styles.kpiValue}>{householdLagging}</Text>
+                </View>
               </View>
-              <View style={styles.kpiItem}>
-                <Text style={styles.kpiLabel}>Pendientes</Text>
-                <Text style={styles.kpiValue}>{householdPendingRate}%</Text>
-              </View>
-              <View style={styles.kpiItem}>
-                <Text style={styles.kpiLabel}>Miembros en riesgo</Text>
-                <Text style={styles.kpiValue}>{householdLagging}</Text>
-              </View>
-            </View>
 
-            {!canNavigateHistory && (
-              <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-household-locked-card')}>
-                <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
-                <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
-              </Pressable>
-            )}
+              {!canNavigateHistory && (
+                <Pressable style={styles.lockedHistoryCard} onPress={() => goToPaywall('my-month-household-locked-card')}>
+                  <Text style={styles.lockedHistoryTitle}>Activa plan Hogar o Familia</Text>
+                  <Text style={styles.lockedHistoryText}>Desbloquea comparativa de meses anteriores y tendencias.</Text>
+                </Pressable>
+              )}
+            </CollapsibleCard>
           </View>
         )}
 
         <View style={styles.listCard}>
-          <Text style={styles.sectionTitle}>{viewMode === 'mine' ? 'Tareas del mes (resumen)' : 'Tareas del hogar (resumen)'}</Text>
-
-          {viewMode === 'mine' ? (
-            taskGroups.length === 0 ? (
-              <Text style={styles.emptyText}>No hay tareas para este mes.</Text>
+          <CollapsibleCard
+            title={viewMode === 'mine' ? 'Tareas del mes (resumen)' : 'Tareas del hogar (resumen)'}
+            subtitle={viewMode === 'mine' ? 'Detalle agrupado por tipo de tarea.' : 'Detalle agrupado con estado general del hogar.'}
+          >
+            {viewMode === 'mine' ? (
+              taskGroups.length === 0 ? (
+                <Text style={styles.emptyText}>No hay tareas para este mes.</Text>
+              ) : (
+                <View style={styles.groupList}>
+                  {taskGroups.map(group => {
+                    const completionPct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
+                    return (
+                      <Pressable
+                        key={group.key}
+                        style={styles.groupRow}
+                        onPress={() => openTaskDetail(group.taskName, group.frequency)}
+                      >
+                        <View style={styles.groupMain}>
+                          <Text style={styles.groupTaskName}>{group.taskName}</Text>
+                          <Text style={styles.groupMeta}>
+                            {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {completionPct}%
+                          </Text>
+                        </View>
+                        <Text style={styles.groupDetailCta}>Abrir detalle</Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              )
             ) : (
-              <View style={styles.groupList}>
-                {taskGroups.map(group => {
-                  const completionPct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
-                  return (
-                    <Pressable
-                      key={group.key}
-                      style={styles.groupRow}
-                      onPress={() => openTaskDetail(group.taskName, group.frequency)}
-                    >
-                      <View style={styles.groupMain}>
-                        <Text style={styles.groupTaskName}>{group.taskName}</Text>
-                        <Text style={styles.groupMeta}>
-                          {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {completionPct}%
-                        </Text>
-                      </View>
-                      <Text style={styles.groupDetailCta}>Abrir detalle</Text>
-                    </Pressable>
-                  )
-                })}
-              </View>
-            )
-          ) : (
-            householdTaskGroups.length === 0 ? (
-              <Text style={styles.emptyText}>No hay tareas asignadas para este mes.</Text>
-            ) : (
-              <View style={styles.groupList}>
-                {householdTaskGroups.map(group => {
-                  const pct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
-                  return (
-                    <Pressable key={group.key} style={styles.groupRow} onPress={() => openHouseholdTaskDetail(group.taskName, group.frequency)}>
-                      <View style={styles.groupMain}>
-                        <Text style={styles.groupTaskName}>{group.taskName}</Text>
-                        <Text style={styles.groupMeta}>
-                          {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {pct}%
-                        </Text>
-                        <View style={styles.groupStatusRow}>
-                          <View style={[styles.statusChip, styles.statusChipPending]}>
-                            <Text style={styles.statusChipTextPending}>Pend {group.pending}</Text>
-                          </View>
-                          <View style={[styles.statusChip, styles.statusChipDone]}>
-                            <Text style={styles.statusChipTextDone}>Comp {group.completed}</Text>
-                          </View>
-                          <View style={[styles.statusChip, styles.statusChipMissed]}>
-                            <Text style={styles.statusChipTextMissed}>Venc {group.missed}</Text>
+              householdTaskGroups.length === 0 ? (
+                <Text style={styles.emptyText}>No hay tareas asignadas para este mes.</Text>
+              ) : (
+                <View style={styles.groupList}>
+                  {householdTaskGroups.map(group => {
+                    const pct = group.total === 0 ? 0 : Math.round((group.completed / group.total) * 100)
+                    return (
+                      <Pressable key={group.key} style={styles.groupRow} onPress={() => openHouseholdTaskDetail(group.taskName, group.frequency)}>
+                        <View style={styles.groupMain}>
+                          <Text style={styles.groupTaskName}>{group.taskName}</Text>
+                          <Text style={styles.groupMeta}>
+                            {formatFrequencyLabel(group.frequency)} · {group.completed}/{group.total} completadas · {pct}%
+                          </Text>
+                          <View style={styles.groupStatusRow}>
+                            <View style={[styles.statusChip, styles.statusChipPending]}>
+                              <Text style={styles.statusChipTextPending}>Pend {group.pending}</Text>
+                            </View>
+                            <View style={[styles.statusChip, styles.statusChipDone]}>
+                              <Text style={styles.statusChipTextDone}>Comp {group.completed}</Text>
+                            </View>
+                            <View style={[styles.statusChip, styles.statusChipMissed]}>
+                              <Text style={styles.statusChipTextMissed}>Venc {group.missed}</Text>
+                            </View>
                           </View>
                         </View>
-                      </View>
-                      <Text style={styles.groupDetailCta}>Abrir detalle</Text>
-                    </Pressable>
-                  )
-                })}
-              </View>
-            )
-          )}
+                        <Text style={styles.groupDetailCta}>Abrir detalle</Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              )
+            )}
+          </CollapsibleCard>
         </View>
 
         <View style={styles.monthNav}>
@@ -1105,6 +1111,41 @@ const styles = StyleSheet.create({
   groupMeta: {
     color: Colors.text.secondary,
     fontSize: 12,
+  },
+  groupStatusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginTop: 4,
+  },
+  statusChip: {
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusChipPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusChipDone: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusChipMissed: {
+    backgroundColor: '#FEE2E2',
+  },
+  statusChipTextPending: {
+    color: '#92400E',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusChipTextDone: {
+    color: '#166534',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusChipTextMissed: {
+    color: '#991B1B',
+    fontSize: 11,
+    fontWeight: '700',
   },
   groupDetailCta: {
     color: '#8A4C1B',
